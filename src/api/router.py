@@ -1,0 +1,223 @@
+"""
+FastAPI router for Open Responses API endpoints.
+
+Provides the /v1/responses endpoint that accepts Open Responses format requests,
+translates them to chat-completions format for the LLMOrchestrator, and returns
+responses in Open Responses format.
+"""
+
+import time
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.api.models import (
+    OpenResponsesRequest,
+    OpenResponsesResponse,
+    ResponseStatus,
+    Usage,
+    DebugInfo,
+    FunctionTool,
+    Item,
+)
+from src.api.translator import chat_completions_to_items, items_to_chat_completions
+from src.llm_orchestrator import LLMOrchestrator
+from src.utils.logger import get_logger
+from src.utils.token_count import get_token_count
+
+logger = get_logger("API")
+
+router = APIRouter(prefix="/v1", tags=["responses"])
+
+# Global orchestrator instance (set by create_app)
+_orchestrator: Optional[LLMOrchestrator] = None
+
+
+def set_orchestrator(orchestrator: LLMOrchestrator) -> None:
+    """Set the global orchestrator instance."""
+    global _orchestrator
+    _orchestrator = orchestrator
+
+
+def get_orchestrator() -> LLMOrchestrator:
+    """Dependency to get the orchestrator instance."""
+    if _orchestrator is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Orchestrator not initialized. Call set_orchestrator() first.",
+        )
+    return _orchestrator
+
+
+def _convert_tools_to_chat_format(tools: list[FunctionTool]) -> list[dict]:
+    """Convert Open Responses tools to chat-completions format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters or {},
+                "strict": tool.strict,
+            },
+        }
+        for tool in tools
+    ]
+
+
+def _convert_tool_choice(tool_choice):
+    """Convert Open Responses tool_choice to chat-completions format.
+
+    Returns str for simple choices (auto, none, required) or dict for specific function.
+    """
+    if tool_choice is None:
+        return "auto"
+    # Handle enum values
+    if hasattr(tool_choice, "value"):
+        return tool_choice.value
+    # Handle SpecificFunctionChoice
+    if hasattr(tool_choice, "name"):
+        return {"type": "function", "function": {"name": tool_choice.name}}
+    return str(tool_choice)
+
+
+@router.post("/responses", response_model=OpenResponsesResponse)
+async def create_response(
+    request: OpenResponsesRequest,
+    orchestrator: LLMOrchestrator = Depends(get_orchestrator),
+) -> OpenResponsesResponse:
+    """
+    Create a model response using the Open Responses format.
+
+    Accepts input in Open Responses format (items), applies the configured
+    memory strategy, and returns the response in Open Responses format.
+    """
+    start_time = time.time()
+    response_id = f"resp_{uuid.uuid4().hex[:24]}"
+    created_at = int(time.time())
+
+    try:
+        # Convert input to chat-completions format
+        if isinstance(request.input, str):
+            # Simple string input -> single user message
+            messages = [{"role": "user", "content": request.input}]
+        else:
+            # List of items -> convert to messages
+            messages = items_to_chat_completions(request.input)
+
+        # Prepare tools if provided
+        tools = None
+        if request.tools:
+            tools = _convert_tools_to_chat_format(request.tools)
+
+        # Prepare tool_choice
+        tool_choice = _convert_tool_choice(request.tool_choice)
+
+        # Build kwargs from request parameters
+        kwargs = {}
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
+        if request.top_p is not None:
+            kwargs["top_p"] = request.top_p
+        if request.max_output_tokens is not None:
+            kwargs["max_tokens"] = request.max_output_tokens
+
+        # Get input token count before processing
+        model_def = orchestrator.get_model_config()
+        input_token_count = get_token_count(messages, model_name=model_def.litellm_name)
+
+        # Call the orchestrator
+        response = orchestrator.generate_with_memory_applied(
+            input_messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
+
+        # Extract the response content
+        output_items: list[Item] = []
+        choice = response.choices[0]
+        message = choice.message
+
+        # Convert response to Open Responses items
+        response_messages = [
+            {
+                "role": message.role,
+                "content": message.content,
+                "tool_calls": (
+                    [
+                        {
+                            "id": tc.id,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in message.tool_calls
+                    ]
+                    if message.tool_calls
+                    else None
+                ),
+            }
+        ]
+        output_items = chat_completions_to_items(response_messages)
+
+        # Build usage info
+        usage = None
+        if response.usage:
+            usage = Usage(
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+
+        # Build debug info
+        processing_time_ms = (time.time() - start_time) * 1000
+        # Use prompt_tokens from response as the compressed count (what was actually sent)
+        compressed_token_count = (
+            response.usage.prompt_tokens if response.usage else input_token_count
+        )
+
+        debug_info = DebugInfo(
+            memory_method=orchestrator.active_memory_key,
+            input_token_count=input_token_count,
+            compressed_token_count=compressed_token_count,
+            compression_ratio=(
+                compressed_token_count / input_token_count
+                if input_token_count > 0
+                else 1.0
+            ),
+            strategy_metadata={},
+            processing_time_ms=processing_time_ms,
+            loop_detection=False,
+        )
+
+        return OpenResponsesResponse(
+            id=response_id,
+            created_at=created_at,
+            completed_at=int(time.time()),
+            status=ResponseStatus.completed,
+            model=request.model,
+            output=output_items,
+            usage=usage,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+            temperature=request.temperature,
+            max_output_tokens=request.max_output_tokens,
+            parallel_tool_calls=request.parallel_tool_calls,
+            metadata=request.metadata,
+            debug_info=debug_info,
+        )
+
+    except Exception as e:
+        logger.error(f"Request failed: {e}")
+        return OpenResponsesResponse(
+            id=response_id,
+            created_at=created_at,
+            completed_at=int(time.time()),
+            status=ResponseStatus.failed,
+            model=request.model,
+            output=[],
+            error={"type": "api_error", "message": str(e)},
+        )

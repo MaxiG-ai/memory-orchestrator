@@ -5,7 +5,15 @@ Provides HTTP endpoints for benchmark-agnostic LLM evaluation
 with pluggable memory strategies.
 """
 
-# Imports deferred until modules are created
+from src.api.app import create_app
+from src.api.models import (
+    OpenResponsesRequest,
+    OpenResponsesResponse,
+    MessageRole,
+    ItemStatus,
+    ResponseStatus,
+)
+
 __all__ = [
     "create_app",
     "OpenResponsesRequest",
