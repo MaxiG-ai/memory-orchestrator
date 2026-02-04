@@ -1,7 +1,9 @@
 import litellm
 import weave
 import os
+import time
 
+from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Union, Iterable
 from openai.types.chat import (
     ChatCompletionMessageParam,
@@ -14,6 +16,24 @@ from src.utils.token_count import get_token_count
 from src.utils.logger import get_logger
 
 logger = get_logger("Orchestrator")
+
+
+@dataclass
+class CompressionMetadata:
+    """Metadata about memory compression applied during request processing.
+
+    Contains metrics useful for debugging and evaluating memory strategy performance.
+    """
+
+    input_token_count: int = 0
+    compressed_token_count: int = 0
+    compression_ratio: float = 1.0
+    memory_method: str = ""
+    processing_time_ms: float = 0.0
+    loop_detected: bool = False
+    strategy_metadata: Dict[str, Any] = field(default_factory=dict)
+    compressed_messages: Optional[List[Dict]] = None
+    original_messages: Optional[List[Dict]] = None
 
 
 class LLMOrchestrator:
@@ -148,8 +168,9 @@ class LLMOrchestrator:
         input_messages: List[Dict[str, str]],
         tools: Optional[List[ChatCompletionToolParam]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = "auto",
+        return_metadata: bool = False,
         **kwargs,
-    ) -> Union[ChatCompletion, Any]:
+    ) -> Union[ChatCompletion, Any, tuple]:
         """
         Execute LLM request with memory processing and comprehensive tracking.
 
@@ -164,17 +185,17 @@ class LLMOrchestrator:
             input_messages: Conversation messages (will be processed by memory strategy)
             tools: Available function definitions
             tool_choice: Tool selection strategy ("auto", "required", "none")
-            model: Optional override for the model used in this plain request.
+            return_metadata: If True, returns tuple of (response, CompressionMetadata)
             **kwargs: Additional parameters (max_tokens, etc.)
 
         Returns:
-            ChatCompletion response from OpenAI API
+            If return_metadata=False: ChatCompletion response from OpenAI API
+            If return_metadata=True: Tuple of (ChatCompletion, CompressionMetadata)
 
         Raises:
             Exception: Any errors from OpenAI API (logged to wandb)
         """
-        # Sync raw history (append only new messages)
-        # TODO: Feature: Keep complete trace before truncation.
+        start_time = time.time()
 
         logger.debug(
             f"🔄 Processing {len(input_messages)} messages with {self.active_memory_key}"
@@ -186,11 +207,21 @@ class LLMOrchestrator:
         )
 
         # Apply memory processing
-        compressed_view, _ = self.memory_processor.apply_strategy(
+        compressed_view, compressed_token_count = self.memory_processor.apply_strategy(
             input_messages,
             self.active_memory_key,
             input_token_count=input_token_count,
             llm_client=self,
+        )
+
+        # Calculate compression metrics
+        if compressed_token_count is None:
+            compressed_token_count = get_token_count(
+                compressed_view, model_name=model_def.litellm_name
+            )
+
+        compression_ratio = (
+            compressed_token_count / input_token_count if input_token_count > 0 else 1.0
         )
 
         # Sanitize kwargs (remove model if passed by benchmark)
@@ -219,6 +250,25 @@ class LLMOrchestrator:
                 request_params["tool_choice"] = tool_choice
 
             response = litellm.completion(**request_params)
+
+            if return_metadata:
+                processing_time_ms = (time.time() - start_time) * 1000
+                metadata = CompressionMetadata(
+                    input_token_count=input_token_count,
+                    compressed_token_count=compressed_token_count,
+                    compression_ratio=compression_ratio,
+                    memory_method=self.active_memory_key,
+                    processing_time_ms=processing_time_ms,
+                    loop_detected=False,
+                    strategy_metadata={},
+                    compressed_messages=compressed_view
+                    if kwargs.get("include_messages")
+                    else None,
+                    original_messages=input_messages
+                    if kwargs.get("include_messages")
+                    else None,
+                )
+                return response, metadata
 
             return response
 

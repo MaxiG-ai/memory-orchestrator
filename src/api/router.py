@@ -22,9 +22,8 @@ from src.api.models import (
     Item,
 )
 from src.api.translator import chat_completions_to_items, items_to_chat_completions
-from src.llm_orchestrator import LLMOrchestrator
+from src.llm_orchestrator import LLMOrchestrator, CompressionMetadata
 from src.utils.logger import get_logger
-from src.utils.token_count import get_token_count
 
 logger = get_logger("API")
 
@@ -93,7 +92,6 @@ async def create_response(
     Accepts input in Open Responses format (items), applies the configured
     memory strategy, and returns the response in Open Responses format.
     """
-    start_time = time.time()
     response_id = f"resp_{uuid.uuid4().hex[:24]}"
     created_at = int(time.time())
 
@@ -123,15 +121,12 @@ async def create_response(
         if request.max_output_tokens is not None:
             kwargs["max_tokens"] = request.max_output_tokens
 
-        # Get input token count before processing
-        model_def = orchestrator.get_model_config()
-        input_token_count = get_token_count(messages, model_name=model_def.litellm_name)
-
-        # Call the orchestrator
-        response = orchestrator.generate_with_memory_applied(
+        # Call the orchestrator with metadata to get compression info
+        response, compression_metadata = orchestrator.generate_with_memory_applied(
             input_messages=messages,
             tools=tools,
             tool_choice=tool_choice,
+            return_metadata=True,
             **kwargs,
         )
 
@@ -172,25 +167,15 @@ async def create_response(
                 total_tokens=response.usage.total_tokens,
             )
 
-        # Build debug info
-        processing_time_ms = (time.time() - start_time) * 1000
-        # Use prompt_tokens from response as the compressed count (what was actually sent)
-        compressed_token_count = (
-            response.usage.prompt_tokens if response.usage else input_token_count
-        )
-
+        # Build debug info from compression metadata
         debug_info = DebugInfo(
-            memory_method=orchestrator.active_memory_key,
-            input_token_count=input_token_count,
-            compressed_token_count=compressed_token_count,
-            compression_ratio=(
-                compressed_token_count / input_token_count
-                if input_token_count > 0
-                else 1.0
-            ),
-            strategy_metadata={},
-            processing_time_ms=processing_time_ms,
-            loop_detection=False,
+            memory_method=compression_metadata.memory_method,
+            input_token_count=compression_metadata.input_token_count,
+            compressed_token_count=compression_metadata.compressed_token_count,
+            compression_ratio=compression_metadata.compression_ratio,
+            strategy_metadata=compression_metadata.strategy_metadata,
+            processing_time_ms=compression_metadata.processing_time_ms,
+            loop_detection=compression_metadata.loop_detected,
         )
 
         return OpenResponsesResponse(

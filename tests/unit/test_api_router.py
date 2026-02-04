@@ -25,6 +25,7 @@ from src.api.models import (
     FunctionTool,
     ItemStatus,
 )
+from src.llm_orchestrator import CompressionMetadata
 
 
 @pytest.fixture
@@ -53,6 +54,25 @@ def mock_orchestrator():
 
 
 @pytest.fixture
+def mock_compression_metadata():
+    """
+    Create a mock CompressionMetadata with default values.
+
+    Simulates metadata returned by generate_with_memory_applied()
+    when return_metadata=True.
+    """
+    return CompressionMetadata(
+        input_token_count=100,
+        compressed_token_count=80,
+        compression_ratio=0.8,
+        memory_method="truncation",
+        processing_time_ms=15.5,
+        loop_detected=False,
+        strategy_metadata={},
+    )
+
+
+@pytest.fixture
 def mock_response():
     """
     Create a mock ChatCompletion response structure.
@@ -77,22 +97,25 @@ def mock_response():
 
 
 @pytest.fixture
-def client(mock_orchestrator, mock_response):
+def client(mock_orchestrator, mock_response, mock_compression_metadata):
     """
     Create a TestClient with mocked orchestrator.
 
-    Patches token counting to avoid model loading, and configures
-    the orchestrator to return the mock response.
+    Configures the orchestrator to return a tuple of (response, metadata)
+    to match the return_metadata=True behavior.
     """
-    mock_orchestrator.generate_with_memory_applied.return_value = mock_response
+    # Return tuple of (response, metadata) to match return_metadata=True behavior
+    mock_orchestrator.generate_with_memory_applied.return_value = (
+        mock_response,
+        mock_compression_metadata,
+    )
 
-    with patch("src.api.router.get_token_count", return_value=10):
-        set_orchestrator(mock_orchestrator)
-        from fastapi import FastAPI
+    set_orchestrator(mock_orchestrator)
+    from fastapi import FastAPI
 
-        app = FastAPI()
-        app.include_router(router)
-        yield TestClient(app)
+    app = FastAPI()
+    app.include_router(router)
+    yield TestClient(app)
 
 
 class TestCreateResponse:
@@ -281,7 +304,7 @@ class TestToolCallResponse:
         1. A MessageItem for the assistant
         2. FunctionCallItem entries for each tool call
         """
-        # Create mock response with tool calls - use MagicMock with spec
+        # Create mock response with tool calls
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message = Mock()
@@ -301,20 +324,32 @@ class TestToolCallResponse:
         mock_response.usage.completion_tokens = 8
         mock_response.usage.total_tokens = 18
 
-        mock_orchestrator.generate_with_memory_applied.return_value = mock_response
+        # Create mock compression metadata
+        mock_metadata = CompressionMetadata(
+            input_token_count=100,
+            compressed_token_count=80,
+            compression_ratio=0.8,
+            memory_method="truncation",
+            processing_time_ms=15.5,
+        )
 
-        with patch("src.api.router.get_token_count", return_value=10):
-            set_orchestrator(mock_orchestrator)
-            from fastapi import FastAPI
+        # Return tuple of (response, metadata) to match return_metadata=True behavior
+        mock_orchestrator.generate_with_memory_applied.return_value = (
+            mock_response,
+            mock_metadata,
+        )
 
-            app = FastAPI()
-            app.include_router(router)
-            client = TestClient(app)
+        set_orchestrator(mock_orchestrator)
+        from fastapi import FastAPI
 
-            response = client.post(
-                "/v1/responses",
-                json={"model": "gpt-4", "input": "What's the weather in NYC?"},
-            )
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        response = client.post(
+            "/v1/responses",
+            json={"model": "gpt-4", "input": "What's the weather in NYC?"},
+        )
 
         assert response.status_code == 200
         data = response.json()
