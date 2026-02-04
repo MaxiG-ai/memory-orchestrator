@@ -22,7 +22,7 @@ from src.api.models import (
     Item,
 )
 from src.api.translator import chat_completions_to_items, items_to_chat_completions
-from src.llm_orchestrator import LLMOrchestrator, CompressionMetadata
+from src.llm_orchestrator import LLMOrchestrator
 from src.utils.logger import get_logger
 
 logger = get_logger("API")
