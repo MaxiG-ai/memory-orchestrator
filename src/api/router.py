@@ -132,6 +132,8 @@ async def create_response(
 
         # Extract the response content
         output_items: list[Item] = []
+        if not response.choices:
+            raise ValueError("LLM response contained no choices")
         choice = response.choices[0]
         message = choice.message
 

@@ -12,19 +12,12 @@ making actual LLM calls.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
-from src.api.router import router, set_orchestrator, get_orchestrator
-from src.api.models import (
-    OpenResponsesRequest,
-    MessageItem,
-    MessageRole,
-    InputTextContent,
-    FunctionTool,
-    ItemStatus,
-)
+
+from src.api.router import router, set_orchestrator
+
 from src.llm_orchestrator import CompressionMetadata
 
 

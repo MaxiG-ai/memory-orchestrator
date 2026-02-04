@@ -18,7 +18,7 @@ Key edge cases tested:
 - Round-trip conversion consistency
 """
 
-import pytest
+
 from src.api.translator import (
     chat_completions_to_items,
     items_to_chat_completions,
