@@ -6,6 +6,7 @@ while the raw data is preserved in the FactStore for precision.
 """
 
 import json
+import weave
 from pathlib import Path
 from typing import Any, Dict
 
@@ -33,6 +34,7 @@ be needed later, but do not output the full JSON.
 Keep the summary under 200 words."""
 
 
+@weave.op()
 def observe_tool_output(
     user_query: str,
     tool_name: str,
@@ -42,6 +44,11 @@ def observe_tool_output(
 ) -> str:
     """
     Generate a natural language summary of a tool's output.
+
+    Traced with Weave to log:
+    - tool_name: The tool being summarized
+    - output_chars: Length of raw output
+    - summary: The generated natural language summary (output)
 
     Args:
         user_query: The user's original task description

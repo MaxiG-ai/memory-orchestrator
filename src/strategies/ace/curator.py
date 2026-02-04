@@ -4,6 +4,7 @@ Maintains and improves the playbook.
 """
 
 import os
+import weave
 from typing import Dict, List, Tuple
 
 from src.strategies.ace.playbook_utils import (
@@ -36,6 +37,7 @@ class Curator:
         with open(prompt_path, "r") as f:
             self.prompt_template = f.read()
 
+    @weave.op()
     def curate(
         self,
         current_playbook: str,
@@ -50,6 +52,15 @@ class Curator:
     ) -> Tuple[str, int, List[Dict]]:
         """
         Curate the playbook based on recent performance.
+
+        Traced with Weave to log:
+        - playbook_tokens_before: Token count of playbook before curation
+        - bullet_count_before: Number of bullets before
+        - token_budget: Max allowed tokens for playbook
+        - updated_playbook: Updated playbook content (output)
+        - operations: List of curator operations (add/update/delete) (output)
+        - playbook_tokens_after: Token count after curation
+        - bullet_count_after: Number of bullets after
 
         Args:
             current_playbook: Current playbook content
@@ -66,8 +77,7 @@ class Curator:
             (updated_playbook, next_global_id, operations)
         """
         # Format stats for prompt
-        stats_text = f"""
-Total bullets: {playbook_stats.get("total_bullets", 0)}
+        stats_text = f"""Total bullets: {playbook_stats.get("total_bullets", 0)}
 High performing: {playbook_stats.get("high_performing", 0)}
 Problematic: {playbook_stats.get("problematic", 0)}
 Unused: {playbook_stats.get("unused", 0)}

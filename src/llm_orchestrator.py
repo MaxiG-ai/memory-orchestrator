@@ -45,6 +45,79 @@ class LLMOrchestrator:
     - Memory processing for context optimization
     - Comprehensive tracking with weave/wandb
 
+    **Weave Tracing for Dataset Runs:**
+
+    For dataset evaluation (e.g., BFCL v3), wrap execution with Weave decorators.
+    All @weave.op decorated methods in this class will automatically create child
+    traces that nest under your benchmark-level parent trace.
+
+    Example - Benchmark Runner Integration:
+
+        import weave
+        from src.llm_orchestrator import LLMOrchestrator
+
+        # Initialize Weave at benchmark level (once per experiment)
+        weave.init("my-project-name")
+
+        @weave.op(name="run_benchmark")
+        def run_benchmark(dataset_path: str):
+            orchestrator = LLMOrchestrator()
+            results = []
+
+            for task in load_dataset(dataset_path):
+                result = run_task(task, orchestrator)
+                results.append(result)
+
+            return {"total_tasks": len(results), "pass_rate": calculate_pass_rate(results)}
+
+        @weave.op(name="run_task")
+        def run_task(task: dict, orchestrator: LLMOrchestrator):
+            orchestrator.reset_session()  # Reset memory state between tasks
+            conversation = []
+
+            for step in range(task["max_steps"]):
+                step_result = run_step(task, conversation, orchestrator)
+                conversation = step_result["updated_conversation"]
+
+                if step_result["completed"]:
+                    break
+
+            return {"task_id": task["id"], "steps": step, "passed": evaluate(task, conversation)}
+
+        @weave.op(name="run_step")
+        def run_step(task: dict, conversation: list, orchestrator: LLMOrchestrator):
+            response, metadata = orchestrator.generate_with_memory_applied(
+                input_messages=conversation,
+                tools=task.get("tools"),
+                tool_choice="auto",
+                return_metadata=True,
+            )
+
+            # Additional processing and evaluation
+            return {
+                "updated_conversation": conversation + [response],
+                "completed": response.choices[0].message.content == "DONE",
+                "metadata": metadata,
+            }
+
+    **Trace Hierarchy:**
+    - run_benchmark (parent trace, logs dataset info)
+        └─ run_task (task trace, logs task ID, initial state)
+            └─ run_step (step trace, logs conversation history, evaluations)
+                └─ generate_with_memory_applied (LLM trace, logs compression metrics)
+                    └─ apply_strategy (memory strategy trace, logs strategy-specific details)
+                        └─ _apply_ace / _apply_memory_bank (internal memory traces)
+                            └─ ace.generator.generate / memory_bank.retrieve (detailed operation traces)
+
+    Internal memory operations are automatically traced and will appear as child traces
+    under apply_strategy. Key logged attributes for each strategy:
+
+    - **ACE Generator**: playbook_tokens, context_length, reasoning_trace, bullet_ids_used
+    - **ACE Reflector**: reflection_text, bullet_tags
+    - **ACE Curator**: playbook_tokens_before/after, operations
+    - **MemoryBank Ingestion**: num_tool_outputs, trace_ids, total_chars_ingested
+    - **MemoryBank Retrieval**: query, top_k, num_retrieved, retrieved_records
+
     Usage:
         # Initialize
         orchestrator = LLMOrchestrator()

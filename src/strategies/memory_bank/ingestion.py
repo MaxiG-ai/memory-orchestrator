@@ -6,6 +6,7 @@ via Observer LLM, and stores embeddings in InsightStore.
 """
 
 import json
+import weave
 from typing import Any, Dict, List, Tuple
 
 from src.strategies.memory_bank.models import InteractionRecord
@@ -93,6 +94,7 @@ def extract_tool_outputs(messages: List[Dict]) -> List[Tuple[str, Dict, Dict]]:
     return outputs
 
 
+@weave.op()
 def ingest_tool_outputs(
     tool_outputs: List[Tuple[str, Dict, Dict]],
     user_query: str,
@@ -104,6 +106,12 @@ def ingest_tool_outputs(
 ) -> List[str]:
     """
     Ingest tool outputs into the dual-store system.
+
+    Traced with Weave to log:
+    - num_tool_outputs: Number of tool outputs being ingested
+    - step_id: Current step in the task
+    - trace_ids: Generated trace IDs for each ingested output (output)
+    - total_chars_ingested: Total characters stored
 
     For each tool output:
     1. Create InteractionRecord and store in FactStore

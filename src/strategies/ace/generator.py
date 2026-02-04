@@ -5,6 +5,7 @@ Generates actions using the playbook as guidance.
 
 import os
 import re
+import weave
 from typing import List, Tuple
 
 from src.strategies.ace.playbook_utils import extract_json_from_text
@@ -19,7 +20,7 @@ class Generator:
     Generator agent that uses playbook to guide decision-making.
     """
 
-    def __init__(self, prompt_path: str|None = None):
+    def __init__(self, prompt_path: str | None = None):
         """
         Initialize generator with prompt template.
 
@@ -34,6 +35,7 @@ class Generator:
         with open(prompt_path, "r") as f:
             self.prompt_template = f.read()
 
+    @weave.op()
     def generate(
         self,
         question: str,
@@ -45,6 +47,13 @@ class Generator:
     ) -> Tuple[str, List[int]]:
         """
         Generate response using playbook guidance.
+
+        Traced with Weave to log:
+        - playbook_tokens: Token count of playbook (indicates size of learned knowledge)
+        - context_length: Length of context provided
+        - has_reflection: Whether reflection from previous step was available
+        - reasoning_trace: The generated reasoning (output)
+        - bullet_ids_used: IDs of playbook bullets referenced (output)
 
         Args:
             question: Current task/question

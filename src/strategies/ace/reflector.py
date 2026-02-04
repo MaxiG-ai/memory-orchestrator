@@ -4,6 +4,7 @@ Analyzes performance and tags playbook bullets.
 """
 
 import os
+import weave
 from typing import Dict, List, Tuple
 
 from src.strategies.ace.playbook_utils import extract_json_from_text
@@ -33,6 +34,7 @@ class Reflector:
         with open(prompt_path, "r") as f:
             self.prompt_template = f.read()
 
+    @weave.op()
     def reflect(
         self,
         question: str,
@@ -45,6 +47,11 @@ class Reflector:
     ) -> Tuple[str, List[Dict]]:
         """
         Reflect on performance and tag bullets.
+
+        Traced with Weave to log:
+        - bullets_count: Number of bullets analyzed
+        - reflection_text: The reflection analysis (output)
+        - bullet_tags: Tags applied to bullets indicating effectiveness (output)
 
         Args:
             question: The question/task

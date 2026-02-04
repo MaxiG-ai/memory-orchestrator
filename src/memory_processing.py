@@ -15,6 +15,33 @@ logger = get_logger("MemoryProcessor")
 
 
 class MemoryProcessor:
+    """
+    Orchestrates memory compression strategies for message history.
+
+    Applies configured strategy (ACE, MemoryBank, Progressive Summarization, Truncation)
+    to reduce token counts while preserving task-relevant context.
+
+    **Weave Tracing:**
+    All memory processing operations are traced with @weave.op decorators.
+    When used within a benchmark runner context, traces appear as children of
+    the parent benchmark trace. See LLMOrchestrator for benchmark integration examples.
+
+    **Traced Methods:**
+    - apply_strategy(): Main entry point, routes to strategy-specific implementations
+    - _apply_ace(): ACE playbook-based strategy
+    - _apply_memory_bank(): Vector-based retrieval strategy
+    - _apply_progressive_summarization(): LLM-based summarization
+    - _apply_truncation(): Simple message truncation
+
+    **Internal Operations Traced (appear as nested child traces):**
+    - ace.generator.generate(): Generates reasoning using playbook
+    - ace.reflector.reflect(): Analyzes performance and tags bullets
+    - ace.curator.curate(): Updates playbook based on reflection
+    - memory_bank.ingest_tool_outputs(): Stores tool outputs in dual-store
+    - memory_bank.observe_tool_output(): Generates summaries via Observer LLM
+    - memory_bank.retrieve_and_format(): Retrieves relevant past interactions
+    """
+
     def __init__(self, config: ExperimentConfig):
         self.config = config
         self.current_summary: str = ""

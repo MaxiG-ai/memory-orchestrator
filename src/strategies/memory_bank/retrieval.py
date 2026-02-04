@@ -6,6 +6,7 @@ raw data from FactStore, and formats for context window injection.
 """
 
 import json
+import weave
 from typing import Any, Dict, List
 
 from src.strategies.memory_bank.fact_store import FactStore
@@ -15,6 +16,7 @@ from src.utils.logger import get_logger
 logger = get_logger("Retrieval")
 
 
+@weave.op()
 def retrieve_and_format(
     query: str,
     fact_store: FactStore,
@@ -24,6 +26,12 @@ def retrieve_and_format(
 ) -> List[Dict[str, Any]]:
     """
     Retrieve top-K relevant interactions and format for context injection.
+
+    Traced with Weave to log:
+    - query: The semantic search query
+    - top_k: Number of results to retrieve
+    - num_retrieved: Actual number of records retrieved (output)
+    - retrieved_records: The formatted results (output)
 
     Performs semantic search over summaries in InsightStore, then fetches
     corresponding raw data from FactStore. Results are formatted with
