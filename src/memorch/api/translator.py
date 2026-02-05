@@ -19,7 +19,7 @@ Functions:
 """
 
 from typing import List, Dict, Union, Any
-from src.memorch.api.models import (
+from memorch.api.models import (
     Item,
     MessageItem,
     FunctionCallItem,

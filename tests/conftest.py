@@ -7,7 +7,7 @@ from pathlib import Path
 def pytest_configure() -> None:
     """Ensure the repository root is on sys.path.
 
-    Tests import the package as `src.memorch.*` but the project is not necessarily installed
+    Tests import the package as `memorch.*` but the project is not necessarily installed
     into the active environment during `uv run pytest`.
     """
     repo_root = Path(__file__).resolve().parents[1]

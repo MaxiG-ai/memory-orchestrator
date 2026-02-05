@@ -10,10 +10,10 @@ from openai.types.chat import (
     ChatCompletionToolParam,
     ChatCompletion,
 )
-from src.memorch.utils.config import load_configs, ExperimentConfig, ModelDef
-from src.memorch.memory_processing import MemoryProcessor
-from src.memorch.utils.token_count import get_token_count
-from src.memorch.utils.logger import get_logger
+from memorch.utils.config import load_configs, ExperimentConfig, ModelDef
+from memorch.memory_processing import MemoryProcessor
+from memorch.utils.token_count import get_token_count
+from memorch.utils.logger import get_logger
 
 logger = get_logger("Orchestrator")
 

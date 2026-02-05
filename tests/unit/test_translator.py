@@ -19,11 +19,11 @@ Key edge cases tested:
 """
 
 
-from src.memorch.api.translator import (
+from memorch.api.translator import (
     chat_completions_to_items,
     items_to_chat_completions,
 )
-from src.memorch.api.models import (
+from memorch.api.models import (
     MessageItem,
     FunctionCallItem,
     FunctionCallOutputItem,

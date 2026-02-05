@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.memorch.api.models import (
+from memorch.api.models import (
     OpenResponsesRequest,
     OpenResponsesResponse,
     ResponseStatus,
@@ -21,9 +21,9 @@ from src.memorch.api.models import (
     FunctionTool,
     Item,
 )
-from src.memorch.api.translator import chat_completions_to_items, items_to_chat_completions
-from src.memorch.llm_orchestrator import LLMOrchestrator
-from src.memorch.utils.logger import get_logger
+from memorch.api.translator import chat_completions_to_items, items_to_chat_completions
+from memorch.llm_orchestrator import LLMOrchestrator
+from memorch.utils.logger import get_logger
 
 logger = get_logger("API")
 

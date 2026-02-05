@@ -7,8 +7,8 @@ and optional health/status endpoints.
 
 from fastapi import FastAPI
 
-from src.memorch.api.router import router, set_orchestrator
-from src.memorch.llm_orchestrator import LLMOrchestrator
+from memorch.api.router import router, set_orchestrator
+from memorch.llm_orchestrator import LLMOrchestrator
 
 
 def create_app(

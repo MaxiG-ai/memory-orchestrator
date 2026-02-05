@@ -5,8 +5,8 @@ Provides HTTP endpoints for benchmark-agnostic LLM evaluation
 with pluggable memory strategies.
 """
 
-from src.memorch.api.app import create_app
-from src.memorch.api.models import (
+from memorch.api.app import create_app
+from memorch.api.models import (
     OpenResponsesRequest,
     OpenResponsesResponse,
     MessageRole,

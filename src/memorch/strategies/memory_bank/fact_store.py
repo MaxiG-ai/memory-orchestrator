@@ -7,7 +7,7 @@ This is the "precision" component of the dual-store architecture.
 
 from typing import Dict, List, Optional
 
-from src.memorch.strategies.memory_bank.models import InteractionRecord
+from memorch.strategies.memory_bank.models import InteractionRecord
 
 
 class FactStore:
