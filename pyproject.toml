@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-memory-api = "src.cli:main"
+memory-api = "memorch.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src/memorch"]
