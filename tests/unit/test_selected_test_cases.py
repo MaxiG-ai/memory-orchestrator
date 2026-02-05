@@ -1,5 +1,5 @@
 import pytest
-from src.utils.config import ExperimentConfig
+from src.memorch.utils.config import ExperimentConfig
 
 
 def test_config_accepts_selected_test_cases():

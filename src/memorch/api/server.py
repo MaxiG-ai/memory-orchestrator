@@ -7,7 +7,7 @@ from environment variables (set by the CLI).
 
 import os
 
-from src.api.app import create_app
+from src.memorch.api.app import create_app
 
 # Read configuration from environment variables (set by CLI)
 exp_config = os.environ.get("MEMORY_API_EXP_CONFIG", "config.toml")

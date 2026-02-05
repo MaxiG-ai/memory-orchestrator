@@ -80,7 +80,7 @@ def main(
     # Create app factory string for uvicorn
     # Use a factory pattern to allow config via env vars
     uvicorn.run(
-        "src.api.server:app",
+        "src.memorch.api.server:app",
         host=host,
         port=port,
         reload=reload,

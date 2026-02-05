@@ -1,9 +1,9 @@
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from src.utils.llm_helpers import extract_content
-from src.utils.logger import get_logger
-from src.utils.split_trace import process_and_split_trace_user
+from src.memorch.utils.llm_helpers import extract_content
+from src.memorch.utils.logger import get_logger
+from src.memorch.utils.split_trace import process_and_split_trace_user
 
 logger = get_logger("ProgressiveSummarization")
 

@@ -1,5 +1,5 @@
 import tiktoken
-from src.utils.logger import get_logger
+from src.memorch.utils.logger import get_logger
 
 logger = get_logger("TokenCounter")
 
