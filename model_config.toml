@@ -39,6 +39,14 @@ provider = "aicore"
 api_base = "http://10.237.89.124:3030"
 api_key = "THINKTANK"
 
+[models.gemini-2-5]
+litellm_name = "vertexai/gemini-2.5-pr0"
+context_window = 128000
+temperature = 0
+provider = "aicore"
+api_base = "http://10.237.89.124:3030"
+api_key = "THINKTANK"
+
 [models.gpt-4o-2024-08-06]
 litellm_name = "openai/gpt-4o-2024-08-06"
 context_window = 128000
