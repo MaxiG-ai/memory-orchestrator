@@ -586,7 +586,82 @@ def test_apply_ace_strategy_injects_playbook():
     # Should have playbook as first message
     assert processed[0]["role"] == "system"
     assert "PLAYBOOK" in processed[0]["content"]
-    assert len(processed) == 2  # playbook + original message
+    # Should now have: playbook + original message + reasoning trace
+    assert len(processed) == 3
+
+    # Should have reasoning trace as last message
+    assert processed[-1]["role"] == "system"
+    assert "ACE REASONING TRACE" in processed[-1]["content"]
+
+
+def test_apply_ace_strategy_injects_reasoning_trace():
+    """
+    Verifies apply_ace_strategy() appends reasoning trace as final system message.
+
+    The reasoning trace should include:
+    1. The reasoning text from the Generator
+    2. The bullet IDs used in the reasoning
+    3. The current step count
+    """
+    mock_client = Mock()
+    mock_settings = Mock()
+    mock_settings.reflector_model = "gpt-4-1-mini"
+    mock_settings.curator_model = "gpt-4-1-mini"
+    mock_settings.generator_model = "gpt-4-1-mini"
+    mock_settings.curator_frequency = 1
+    mock_settings.playbook_token_budget = 4096
+
+    # Mock curator response
+    mock_curator_response = Mock()
+    mock_curator_message = Mock()
+    mock_curator_message.content = json.dumps(
+        {"reasoning": "Bootstrap playbook", "operations": []}
+    )
+    mock_curator_response.choices = [Mock(message=mock_curator_message)]
+
+    # Mock generator response with specific reasoning and bullet IDs
+    mock_generator_response = Mock()
+    mock_generator_message = Mock()
+    mock_generator_message.content = json.dumps(
+        {
+            "reasoning_trace": "I will use bullet 1 to decompose the task",
+            "response": "Next action",
+            "bullet_ids_used": [1, 3, 5],
+        }
+    )
+    mock_generator_response.choices = [Mock(message=mock_generator_message)]
+
+    mock_client.generate_plain.side_effect = [
+        mock_curator_response,
+        mock_generator_response,
+    ]
+
+    state = ACEState()
+    messages = [
+        {"role": "user", "content": "Book a flight to Paris"},
+        {"role": "assistant", "content": "Searching for flights..."},
+    ]
+
+    processed, token_count = apply_ace_strategy(
+        messages, mock_client, mock_settings, state
+    )
+
+    # Verify structure: playbook + original messages + reasoning trace
+    assert len(processed) == 4  # playbook + 2 original + reasoning
+
+    # Verify reasoning trace is last message
+    reasoning_msg = processed[-1]
+    assert reasoning_msg["role"] == "system"
+    assert "ACE REASONING TRACE" in reasoning_msg["content"]
+
+    # Verify step count is included
+    assert "Step 1" in reasoning_msg["content"]
+
+    # Verify reasoning content is included
+    assert "I will use bullet 1 to decompose the task" in reasoning_msg["content"]
+
+    # Verify bullet IDs are included
+    assert "[1, 3, 5]" in reasoning_msg["content"]
 
 
 def test_apply_ace_strategy_increments_step_count():

@@ -230,7 +230,16 @@ def apply_ace_strategy(
     # Insert as first system message
     playbook_message = {"role": "system", "content": f"## PLAYBOOK\n\n{state.playbook}"}
 
-    processed_messages = [playbook_message] + messages
+    # Format reasoning trace content (reasoning + bullet IDs)
+    reasoning_content = (
+        f"## ACE REASONING TRACE (Step {state.step_count})\n\n"
+        f"### Reasoning\n{reasoning_trace}\n\n"
+        f"### Bullet IDs Used\n{bullet_ids_used}"
+    )
+    reasoning_message = {"role": "system", "content": reasoning_content}
+
+    # Playbook at start, reasoning trace at end
+    processed_messages = [playbook_message] + messages + [reasoning_message]
 
     # Calculate token count using the existing token counter
     token_count = get_token_count(processed_messages)
