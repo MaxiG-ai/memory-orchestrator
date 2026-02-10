@@ -36,6 +36,21 @@ class CompressionMetadata:
     original_messages: Optional[List[Dict]] = None
 
 
+@dataclass
+class CompressedTraceEntry:
+    """A single entry in the compressed trace buffer.
+
+    Captures the memory-processed messages for each LLM call within a session.
+    """
+
+    step: int  # Call number within session (1-indexed)
+    input_token_count: int
+    compressed_token_count: int
+    compression_ratio: float
+    memory_method: str
+    compressed_messages: List[Dict]  # The actual processed messages sent to LLM
+
+
 class LLMOrchestrator:
     """
     Centralized LLM interaction manager.
@@ -80,6 +95,11 @@ class LLMOrchestrator:
         self.active_model_key: str = self.cfg.enabled_models[0]
         self.active_memory_key: str = self.cfg.enabled_memory_methods[0]
 
+        # Session-level trace buffer for compressed messages
+        # Collects memory-processed messages for each LLM call within a session
+        self._compressed_trace_buffer: List[CompressedTraceEntry] = []
+        self._trace_step_counter: int = 0
+
         # Configure LiteLLM
         if self.cfg.weave_deep_logging:
             os.environ["LITELLM_LOG"] = "DEBUG"
@@ -101,7 +121,43 @@ class LLMOrchestrator:
         Clear memory state. Call this before starting a new benchmark conversation.
         """
         self.memory_processor.reset_state()
+        self._compressed_trace_buffer = []
+        self._trace_step_counter = 0
         logger.info("🔄 Session Reset")
+
+    def get_compressed_trace(self) -> List[CompressedTraceEntry]:
+        """
+        Retrieve the compressed trace buffer for the current session.
+
+        Returns a list of CompressedTraceEntry objects, one for each LLM call
+        made during this session. Use this after running a benchmark case to
+        save the memory-processed messages separately.
+
+        Returns:
+            List of CompressedTraceEntry objects
+        """
+        return self._compressed_trace_buffer.copy()
+
+    def get_compressed_trace_as_dicts(self) -> List[Dict]:
+        """
+        Retrieve the compressed trace buffer as serializable dictionaries.
+
+        Convenience method for JSON serialization.
+
+        Returns:
+            List of dictionaries representing each trace entry
+        """
+        return [
+            {
+                "step": entry.step,
+                "input_token_count": entry.input_token_count,
+                "compressed_token_count": entry.compressed_token_count,
+                "compression_ratio": entry.compression_ratio,
+                "memory_method": entry.memory_method,
+                "compressed_messages": entry.compressed_messages,
+            }
+            for entry in self._compressed_trace_buffer
+        ]
 
     def set_active_context(self, model_key: str, memory_key: str):
         """
@@ -223,6 +279,18 @@ class LLMOrchestrator:
         compression_ratio = (
             compressed_token_count / input_token_count if input_token_count > 0 else 1.0
         )
+
+        # Record compressed trace entry for this call
+        self._trace_step_counter += 1
+        trace_entry = CompressedTraceEntry(
+            step=self._trace_step_counter,
+            input_token_count=input_token_count,
+            compressed_token_count=compressed_token_count,
+            compression_ratio=compression_ratio,
+            memory_method=self.active_memory_key,
+            compressed_messages=compressed_view,
+        )
+        self._compressed_trace_buffer.append(trace_entry)
 
         # Sanitize kwargs (remove model if passed by benchmark)
         kwargs.pop("model", None)
