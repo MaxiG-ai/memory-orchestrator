@@ -18,6 +18,31 @@ from memorch.utils.logger import get_logger
 logger = get_logger("Orchestrator")
 
 
+def _serialize_message(msg: Any) -> Dict:
+    """Convert a message to a JSON-serializable dictionary.
+
+    Handles raw dicts, pydantic models, and OpenAI SDK objects like
+    ChatCompletionMessageToolCall.
+    """
+    if isinstance(msg, dict):
+        # Recursively serialize nested objects
+        result = {}
+        for key, value in msg.items():
+            if hasattr(value, "model_dump"):
+                result[key] = value.model_dump()
+            elif isinstance(value, list):
+                result[key] = [
+                    v.model_dump() if hasattr(v, "model_dump") else v for v in value
+                ]
+            else:
+                result[key] = value
+        return result
+    elif hasattr(msg, "model_dump"):
+        return msg.model_dump()
+    else:
+        return msg
+
+
 @dataclass
 class CompressionMetadata:
     """Metadata about memory compression applied during request processing.
@@ -142,7 +167,8 @@ class LLMOrchestrator:
         """
         Retrieve the compressed trace buffer as serializable dictionaries.
 
-        Convenience method for JSON serialization.
+        Convenience method for JSON serialization. Handles OpenAI SDK objects
+        like ChatCompletionMessageToolCall by converting them to dicts.
 
         Returns:
             List of dictionaries representing each trace entry
@@ -154,7 +180,9 @@ class LLMOrchestrator:
                 "compressed_token_count": entry.compressed_token_count,
                 "compression_ratio": entry.compression_ratio,
                 "memory_method": entry.memory_method,
-                "compressed_messages": entry.compressed_messages,
+                "compressed_messages": [
+                    _serialize_message(msg) for msg in entry.compressed_messages
+                ],
             }
             for entry in self._compressed_trace_buffer
         ]
