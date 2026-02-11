@@ -54,8 +54,10 @@ class MemoryProcessor:
                 {"role": "system", "content": "Infinite loop detected; aborting."}
             ], None
 
-        # ACE strategy should be applied at all times as it's a playbook-based learning system
-        # that builds and refines knowledge regardless of token count
+        ### MEMORY STRATEGY APPLICATION LOGIC ###
+        #########################################
+        
+        ## STRATEGIES APPLIED REGARDLESS OF TOKEN COUNT ##
         if settings.type == "ace":
             processed_messages, output_token_count = self._apply_ace(
                 messages=messages,
@@ -65,7 +67,6 @@ class MemoryProcessor:
             )
             return processed_messages, output_token_count
 
-        # Memory bank runs every step - it ingests tool outputs and retrieves relevant history
         if settings.type == "memory_bank":
             processed_messages, output_token_count = self._apply_memory_bank(
                 messages=messages,
@@ -74,19 +75,22 @@ class MemoryProcessor:
                 llm_client=llm_client,
             )
             return processed_messages, output_token_count
+        
 
-        # Other strategies only apply when token count exceeds threshold
+        ## STRATEGIES APPLIED BASED ON TOKEN COUNT ##
         if input_token_count < self.config.compact_threshold:
-            # TODO: Context reading for memory bank and ACON should happen here nonetheless.
             return messages, input_token_count
         else:
             logger.debug(
                 f"🧠 Pre-Processing Token Count: {input_token_count}, exceeds compact_threshold={self.config.compact_threshold}"
             )
+            # Truncation
             if settings.type == "truncation":
                 processed_messages, output_token_count = self._apply_truncation(
-                    messages, input_token_count
+                    messages=messages, 
+                    token_count=input_token_count
                 )
+            # Progressive Summarization
             elif settings.type == "progressive_summarization":
                 processed_messages, output_token_count = (
                     self._apply_progressive_summarization(
@@ -98,7 +102,7 @@ class MemoryProcessor:
                 )
             else:
                 logger.warning(
-                    f"🧠 Unknown memory strategy type: {settings.type}. No memory strategy applied; returning original messages."
+                    f"🧠 Unknown memory strategy type: {settings.type}. Applying no_strategy; returning original messages."
                 )
                 return messages, None
 
@@ -106,12 +110,16 @@ class MemoryProcessor:
 
     @weave.op(enable_code_capture=False)
     def _apply_truncation(
-        self, messages: List[Dict], token_count: int
+        self, 
+        messages: List[Dict], 
+        token_count: int
     ) -> Tuple[List[Dict], int]:
-        """Truncates archived context when token threshold is exceeded."""
+        """Applies Truncation to a message trace by cutting conversation history, 
+        keeping only the last user query and tool interaction."""
         logger.debug(
             f"🧠 Applying Truncation Strategy. Current query with {token_count} tokens"
         )
+
         truncated_conv = truncate_messages(messages)
         return truncated_conv, get_token_count(truncated_conv)
 
