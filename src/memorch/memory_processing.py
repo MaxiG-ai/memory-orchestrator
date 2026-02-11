@@ -104,7 +104,8 @@ class MemoryProcessor:
                 logger.warning(
                     f"🧠 Unknown memory strategy type: {settings.type}. Applying no_strategy; returning original messages."
                 )
-                return messages, None
+                output_token_count = input_token_count
+                return messages, output_token_count
 
         return processed_messages, output_token_count
 
