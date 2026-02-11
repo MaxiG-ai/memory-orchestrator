@@ -14,7 +14,7 @@ from memorch.utils.config import load_configs, ExperimentConfig, ModelDef
 from memorch.memory_processing import MemoryProcessor
 from memorch.utils.token_count import get_token_count
 from memorch.utils.logger import get_logger
-from memorch.utils.trace_history import TraceHistoryEntry #, _serialize_message
+from memorch.utils.trace_history import TraceHistoryEntry, _serialize_message
 
 logger = get_logger("Orchestrator")
     
@@ -110,43 +110,30 @@ class LLMOrchestrator:
         self._trace_step_counter = 0
         logger.info("🔄 Session Reset")
 
-    # TODO: Check if functions below are still needed
-    # def get_compressed_trace(self) -> List[TraceHistoryEntry]:
-    #     """
-    #     Retrieve the compressed trace buffer for the current session.
+    def get_compressed_trace_as_dicts(self) -> List[Dict]:
+        """
+        Retrieve the compressed trace buffer as serializable dictionaries.
 
-    #     Returns a list of TraceHistoryEntry objects, one for each LLM call
-    #     made during this session. Use this after running a benchmark case to
-    #     save the memory-processed messages separately.
+        Convenience method for JSON serialization. Handles OpenAI SDK objects
+        like ChatCompletionMessageToolCall by converting them to dicts.
 
-    #     Returns:
-    #         List of CompressedTraceEntry objects
-    #     """
-    #     return self._compressed_trace_buffer.copy()
-
-    # def get_compressed_trace_as_dicts(self) -> List[Dict]:
-    #     """
-    #     Retrieve the compressed trace buffer as serializable dictionaries.
-
-    #     Convenience method for JSON serialization. Handles OpenAI SDK objects
-    #     like ChatCompletionMessageToolCall by converting them to dicts.
-
-    #     Returns:
-    #         List of dictionaries representing each trace entry
-    #     """
-    #     return [
-    #         {
-    #             "step": entry.step,
-    #             "input_token_count": entry.input_token_count,
-    #             "compressed_token_count": entry.compressed_token_count,
-    #             "compression_ratio": entry.compression_ratio,
-    #             "memory_method": entry.memory_method,
-    #             "compressed_messages": [
-    #                 _serialize_message(msg) for msg in entry.compressed_messages
-    #             ],
-    #         }
-    #         for entry in self._compressed_trace_buffer
-    #     ]
+        Returns:
+            List of dictionaries representing each trace entry
+        """
+        result_list = []
+        for entry in self._compressed_trace_buffer:
+            entry_dict = {
+                "step": entry.step,
+                "input_token_count": entry.input_token_count,
+                "compressed_token_count": entry.compressed_token_count,
+                "compression_ratio": entry.compression_ratio,
+                "memory_method": entry.memory_method,
+                "compressed_messages": [
+                    _serialize_message(msg) for msg in entry.compressed_messages
+                ],
+            }
+            result_list.append(entry_dict)
+        return result_list
 
     def set_active_context(self, model_key: str, memory_key: str):
         """
