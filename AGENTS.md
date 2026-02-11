@@ -1,7 +1,7 @@
 # Contributing to this project
 
-- Always create a feature branch before you go to work.
-- The feature branch should follow the template "opencode->descriptive name<"
+- Create a feature branch before you go to work.
+- The feature branch should follow the template "opencode/descriptive-name"
 - add all your changes to the feature branch
 - commit your changes to make it easy for me to follow them
 
