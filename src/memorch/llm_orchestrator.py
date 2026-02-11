@@ -358,11 +358,9 @@ class LLMOrchestrator:
                     loop_detected=False,
                     strategy_metadata={},
                     compressed_messages=compressed_view
-                    if kwargs.get("include_messages")
-                    else None,
+                    if kwargs.get("include_messages") else None,
                     original_messages=input_messages
-                    if kwargs.get("include_messages")
-                    else None,
+                    if kwargs.get("include_messages") else None,
                 )
                 return response, metadata
 
