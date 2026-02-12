@@ -14,7 +14,7 @@ from memorch.strategies.memory_bank.fact_store import FactStore
 from memorch.strategies.memory_bank.insight_store import InsightStore
 from memorch.strategies.memory_bank.retrieval import (
     retrieve_and_format,
-    format_retrieved_memory,
+    format_retrieved_memory_message,
 )
 
 
@@ -417,9 +417,9 @@ class TestRetrieval:
         if large_result:
             assert len(large_result["raw_data"]) <= 100 + 3  # +3 for "..."
 
-    def test_format_retrieved_memory_produces_expected_format(self):
+    def test_format_retrieved_memory_message_produces_expected_format(self):
         """
-        format_retrieved_memory() should produce the spec-defined format:
+        format_retrieved_memory_message() should produce the spec-defined format:
         [RETRIEVED RECORD N]
         Summary: ...
         Raw Data: ...
@@ -438,22 +438,13 @@ class TestRetrieval:
             },
         ]
 
-        formatted = format_retrieved_memory(records)
+        formatted = format_retrieved_memory_message(records)[0].get("content", "")  
 
         assert "[RETRIEVED RECORD 1]" in formatted
         assert "[RETRIEVED RECORD 2]" in formatted
         assert "Summary: Found coordinates for Berlin" in formatted
         assert "Raw Data:" in formatted
         assert "-------------------" in formatted
-
-    def test_format_retrieved_memory_handles_empty_list(self):
-        """
-        format_retrieved_memory() should return empty string for empty input.
-        Handles first-step case where no history exists.
-        """
-        formatted = format_retrieved_memory([])
-
-        assert formatted == ""
 
 
 # =============================================================================

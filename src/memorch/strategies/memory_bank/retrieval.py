@@ -72,7 +72,7 @@ def retrieve_and_format(
     return results
 
 
-def format_retrieved_memory(records: List[Dict[str, Any]]) -> str:
+def format_retrieved_memory_message(records: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """
     Format retrieved records into the spec-defined format for context injection.
 
@@ -91,7 +91,7 @@ def format_retrieved_memory(records: List[Dict[str, Any]]) -> str:
         Formatted string for context window, or empty string if no records
     """
     if not records:
-        return ""
+        return []
 
     sections = []
     for i, record in enumerate(records, 1):
@@ -101,4 +101,7 @@ Raw Data: {record["raw_data"]}
 -------------------"""
         sections.append(section)
 
-    return "\n".join(sections)
+    messages = [
+        {"role": "system", "content": "\n".join(sections)}
+    ]
+    return messages 
