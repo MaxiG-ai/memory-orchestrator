@@ -4,7 +4,7 @@ Implements the apply_ace_strategy function and ACEState dataclass.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from memorch.strategies.ace.playbook_utils import (
     EMPTY_PLAYBOOK_TEMPLATE,
@@ -16,7 +16,6 @@ from memorch.strategies.ace.generator import Generator
 from memorch.strategies.ace.reflector import Reflector
 from memorch.strategies.ace.curator import Curator
 from memorch.utils.logger import get_logger
-from memorch.utils.token_count import get_token_count
 
 logger = get_logger("ACEStrategy")
 
@@ -49,7 +48,7 @@ class ACEState:
 
 def apply_ace_strategy(
     messages: List[Dict], llm_client, settings, state: ACEState
-) -> Tuple[List[Dict], int]:
+) -> List[Dict]:
     """
     Apply ACE strategy to messages.
 
@@ -67,14 +66,13 @@ def apply_ace_strategy(
         state: Current ACE state
 
     Returns:
-        (processed_messages, token_count)
+        processed_messages
     """
     state.step_count += 1
     curator_frequency = getattr(settings, "curator_frequency", 1)
 
     # Debug: Log entry state and configuration
-    logger.debug(f"\n{'=' * 60}")
-    logger.debug(f"ACE Strategy - Step {state.step_count}")
+    logger.debug(f"\nACE Strategy - Step {state.step_count}")
     logger.debug(f"{'=' * 60}")
     logger.debug(
         f"State: last_reasoning_trace={'<set>' if state.last_reasoning_trace else '<empty>'}"
@@ -87,13 +85,11 @@ def apply_ace_strategy(
     logger.debug(f"Config: curator_frequency={curator_frequency}")
     logger.debug(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
 
-    # Extract current action/observation from messages
-    # The last user message typically contains the observation
-    # TODO: This is not true, for ComplexFuncBench there is exactly one user message at the start
-    last_user_msg = ""
-    for msg in reversed(messages):
+    # Extract first user message, which contains the task
+    task = ""
+    for msg in messages:
         if msg.get("role") == "user":
-            last_user_msg = msg.get("content", "")
+            task = msg.get("content", "")
             break
 
     # Run Reflector if we have previous step data
@@ -116,13 +112,13 @@ def apply_ace_strategy(
 
         # Run reflection
         reflection_text, bullet_tags = reflector.reflect(
-            question=last_user_msg,
+            question=task,
             reasoning_trace=state.last_reasoning_trace,
             predicted_answer=state.last_predicted_answer,
-            environment_feedback=last_user_msg,
+            environment_feedback="No Feedback", # Task in ComplexFuncBench run without environment feedback, so we pass a placeholder
             bullets_used=bullets_used,
             llm_client=llm_client,
-            model=getattr(settings, "reflector_model", "gpt-4-1-mini"),
+            model=getattr(settings, "reflector_model", "gpt-4-1"),
         )
 
         logger.debug(f"Reflector output - bullet_tags: {bullet_tags}")
@@ -165,12 +161,12 @@ def apply_ace_strategy(
         updated_playbook, updated_id, operations = curator.curate(
             current_playbook=state.playbook,
             recent_reflection=state.last_reflection,
-            question_context=last_user_msg,
+            question_context="No additional context", # Additional context is not collected in ComplexFuncBench runs, so we pass a placeholder
             step=state.step_count,
             token_budget=getattr(settings, "playbook_token_budget", 4096),
             playbook_stats=stats,
             llm_client=llm_client,
-            model=getattr(settings, "curator_model", "gpt-4-1-mini"),
+            model=getattr(settings, "curator_model", "gpt-4-1"),
             next_global_id=state.next_global_id,
         )
 
@@ -205,12 +201,12 @@ def apply_ace_strategy(
     )
 
     reasoning_trace, bullet_ids_used = generator.generate(
-        question=last_user_msg,
+        question=task,
         playbook=state.playbook,
         context=context,
         reflection=state.last_reflection,
         llm_client=llm_client,
-        model=getattr(settings, "generator_model", "gpt-4-1-mini"),
+        model=getattr(settings, "generator_model", "gpt-4-1"),
     )
 
     logger.debug(
@@ -224,11 +220,13 @@ def apply_ace_strategy(
     state.last_predicted_answer = (
         reasoning_trace  # Use reasoning trace as predicted answer
     )
-    logger.debug(f"✓ State updated for next cycle: last_bullet_ids={bullet_ids_used}")
 
     # Inject playbook into messages
     # Insert as first system message
-    playbook_message = {"role": "system", "content": f"## PLAYBOOK\n\n{state.playbook}"}
+    playbook_message = {
+        "role": "system", 
+        "content": f"## PLAYBOOK\n\n{state.playbook}"
+        }
 
     # Format reasoning trace content (reasoning + bullet IDs)
     reasoning_content = (
@@ -238,16 +236,4 @@ def apply_ace_strategy(
     )
     reasoning_message = {"role": "system", "content": reasoning_content}
 
-    # Playbook at start, reasoning trace at end
-    processed_messages = [playbook_message] + messages + [reasoning_message]
-
-    # Calculate token count using the existing token counter
-    token_count = get_token_count(processed_messages)
-
-    # Final summary logging
-    logger.debug(f"\n--- ACE Step {state.step_count} Summary ---")
-    logger.debug(f"Final playbook (first 400 chars): {state.playbook[:400]}...")
-    logger.debug(f"Output token count: {token_count}")
-    logger.debug(f"{'=' * 60}\n")
-
-    return processed_messages, token_count
+    return [playbook_message] + messages + [reasoning_message]
