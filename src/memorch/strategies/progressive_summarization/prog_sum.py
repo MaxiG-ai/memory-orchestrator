@@ -9,7 +9,7 @@ logger = get_logger("ProgressiveSummarization")
 
 
 def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
-    repo_root = Path(__file__).resolve().parents[4]
+    repo_root = Path(__file__).resolve().parents[3]
     if prompt_path:
         candidate = Path(prompt_path)
         if candidate.is_file():
