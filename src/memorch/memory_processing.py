@@ -156,14 +156,13 @@ class MemoryProcessor:
         llm_client: Optional[Any],
     ) -> Tuple[List[Dict], int]:
         """Applies ACE strategy by delegating to ace_strategy module."""
-
         logger.debug(
             f"🧠 Applying ACE Strategy. Current query with {token_count} tokens"
         )
-        processed, new_count = apply_ace_strategy(
+        processed, _ = apply_ace_strategy(
             messages, llm_client, settings, self._ace_state
         )
-        return processed, new_count
+        return processed, get_token_count(processed)
 
     @weave.op(enable_code_capture=False)
     def _apply_memory_bank(
@@ -185,7 +184,7 @@ class MemoryProcessor:
         if self._memory_bank_state is None:
             self._memory_bank_state = MemoryBankState()
 
-        processed, new_count = apply_memory_bank_strategy(
+        processed, _ = apply_memory_bank_strategy(
             messages, llm_client, settings, self._memory_bank_state
         )
-        return processed, new_count
+        return processed, get_token_count(processed)
