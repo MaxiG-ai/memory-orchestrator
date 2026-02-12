@@ -68,13 +68,13 @@ class Generator:
         logger.debug(
             f"Generator input - playbook (first 200 chars): {playbook[:200]}..."
         )
-        logger.debug(
-            f"Generator input - question (first 100 chars): {question[:100]}..."
-        )
 
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
-        response = llm_client.generate_plain(input_messages=messages, model=model)
+        response = llm_client.generate_plain(
+            input_messages=messages, 
+            model=model
+            )
         response_text = extract_content(response)
 
         logger.debug(

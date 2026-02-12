@@ -158,8 +158,10 @@ class MemoryProcessor:
         logger.debug(
             f"🧠 Applying ACE Strategy. Current query with {token_count} tokens"
         )
-        processed, _ = apply_ace_strategy(
-            messages, llm_client, settings, self._ace_state
+        processed = apply_ace_strategy(
+            messages, 
+            llm_client, 
+            settings, self._ace_state
         )
         return processed, get_token_count(processed)
 
