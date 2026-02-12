@@ -68,20 +68,15 @@ class Reflector:
         )
 
         logger.debug(
-            f"Reflector input - bullets_used: {bullets_used[:200] if bullets_used else '<empty>'}..."
-        )
-        logger.debug(
             f"Reflector input - reasoning_trace (first 200 chars): {reasoning_trace[:200] if reasoning_trace else '<empty>'}..."
         )
 
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
-        response = llm_client.generate_plain(input_messages=messages, model=model)
+        response = llm_client.generate_plain(
+            input_messages=messages, 
+            model=model)
         response_text = extract_content(response)
-
-        logger.debug(
-            f"Reflector LLM response (first 300 chars): {response_text[:300]}..."
-        )
 
         # Extract bullet tags
         bullet_tags = self._extract_bullet_tags(response_text)

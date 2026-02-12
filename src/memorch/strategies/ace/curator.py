@@ -45,7 +45,7 @@ class Curator:
         token_budget: int,
         playbook_stats: Dict,
         llm_client,
-        model: str = "gpt-4-1-mini",
+        model: str = "gpt-4-1",
         next_global_id: int = 1,
     ) -> Tuple[str, int, List[Dict]]:
         """
