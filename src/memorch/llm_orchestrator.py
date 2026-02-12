@@ -238,6 +238,17 @@ class LLMOrchestrator:
             input_messages, model_name=model_def.litellm_name
         )
 
+        if self._trace_step_counter == 0:
+            first_trace_entry = TraceHistoryEntry(
+                step=0,
+                input_token_count=input_token_count,
+                compressed_token_count=0,
+                compression_ratio=1.0,
+                memory_method=self.active_memory_key,
+                compressed_messages=input_messages,
+            )
+            self._compressed_trace_buffer.append(first_trace_entry)
+
         # Apply memory processing
         compressed_view, compressed_token_count = self.memory_processor.apply_strategy(
             input_messages,
