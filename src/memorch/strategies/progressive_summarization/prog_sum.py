@@ -9,7 +9,7 @@ logger = get_logger("ProgressiveSummarization")
 
 
 def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     if prompt_path:
         candidate = Path(prompt_path)
         if candidate.is_file():
@@ -17,15 +17,29 @@ def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
         candidate_from_root = repo_root / prompt_path
         if candidate_from_root.is_file():
             return candidate_from_root
-    return repo_root / "src/strategies/progressive_summarization/prog_sum.prompt.md"
+    return repo_root / "src/memorch/strategies/progressive_summarization/prog_sum.prompt.md"
 
 
 def summarize_conv_history(
     messages: List[Dict],
     llm_client,
-    summarizer_model: str = "gpt-4-1-mini",
+    summarizer_model: str = "gpt-4-1",
     summary_prompt_path: Optional[str] = None,
 ) -> List[Dict]:
+    """
+    Splitting a message trace into user query and conversation history, then summarizing the conversation history using an LLM, 
+    and finally returning a new message list that includes the summary and the user query.
+    
+    :param messages: Description
+    :type messages: List[Dict]
+    :param llm_client: Description
+    :param summarizer_model: Description
+    :type summarizer_model: str
+    :param summary_prompt_path: Description
+    :type summary_prompt_path: Optional[str]
+    :return: Description
+    :rtype: List[Dict[Any, Any]]
+    """
     if llm_client is None:
         raise ValueError("llm_client is required for progressive summarization")
 
@@ -43,9 +57,10 @@ def summarize_conv_history(
         },
     ]
 
-    # Call LLM to generate summary (let exceptions propagate)
+    # Call LLM to generate summary
     response = llm_client.generate_plain(
-        input_messages=prompt_messages, model=summarizer_model
+        input_messages=prompt_messages, 
+        model=summarizer_model
     )
     summary_text = extract_content(response)
 
