@@ -1,3 +1,4 @@
+import copy
 import litellm
 import weave
 import os
@@ -14,35 +15,10 @@ from memorch.utils.config import load_configs, ExperimentConfig, ModelDef
 from memorch.memory_processing import MemoryProcessor
 from memorch.utils.token_count import get_token_count
 from memorch.utils.logger import get_logger
+from memorch.utils.trace_history import TraceHistoryEntry, _serialize_message
 
 logger = get_logger("Orchestrator")
-
-
-def _serialize_message(msg: Any) -> Dict:
-    """Convert a message to a JSON-serializable dictionary.
-
-    Handles raw dicts, pydantic models, and OpenAI SDK objects like
-    ChatCompletionMessageToolCall.
-    """
-    if isinstance(msg, dict):
-        # Recursively serialize nested objects
-        result = {}
-        for key, value in msg.items():
-            if hasattr(value, "model_dump"):
-                result[key] = value.model_dump()
-            elif isinstance(value, list):
-                result[key] = [
-                    v.model_dump() if hasattr(v, "model_dump") else v for v in value
-                ]
-            else:
-                result[key] = value
-        return result
-    elif hasattr(msg, "model_dump"):
-        return msg.model_dump()
-    else:
-        return msg
-
-
+    
 @dataclass
 class CompressionMetadata:
     """Metadata about memory compression applied during request processing.
@@ -59,21 +35,6 @@ class CompressionMetadata:
     strategy_metadata: Dict[str, Any] = field(default_factory=dict)
     compressed_messages: Optional[List[Dict]] = None
     original_messages: Optional[List[Dict]] = None
-
-
-@dataclass
-class CompressedTraceEntry:
-    """A single entry in the compressed trace buffer.
-
-    Captures the memory-processed messages for each LLM call within a session.
-    """
-
-    step: int  # Call number within session (1-indexed)
-    input_token_count: int
-    compressed_token_count: int
-    compression_ratio: float
-    memory_method: str
-    compressed_messages: List[Dict]  # The actual processed messages sent to LLM
 
 
 class LLMOrchestrator:
@@ -122,7 +83,7 @@ class LLMOrchestrator:
 
         # Session-level trace buffer for compressed messages
         # Collects memory-processed messages for each LLM call within a session
-        self._compressed_trace_buffer: List[CompressedTraceEntry] = []
+        self._compressed_trace_buffer: List[TraceHistoryEntry] = []
         self._trace_step_counter: int = 0
 
         # Configure LiteLLM
@@ -150,19 +111,6 @@ class LLMOrchestrator:
         self._trace_step_counter = 0
         logger.info("🔄 Session Reset")
 
-    def get_compressed_trace(self) -> List[CompressedTraceEntry]:
-        """
-        Retrieve the compressed trace buffer for the current session.
-
-        Returns a list of CompressedTraceEntry objects, one for each LLM call
-        made during this session. Use this after running a benchmark case to
-        save the memory-processed messages separately.
-
-        Returns:
-            List of CompressedTraceEntry objects
-        """
-        return self._compressed_trace_buffer.copy()
-
     def get_compressed_trace_as_dicts(self) -> List[Dict]:
         """
         Retrieve the compressed trace buffer as serializable dictionaries.
@@ -173,8 +121,9 @@ class LLMOrchestrator:
         Returns:
             List of dictionaries representing each trace entry
         """
-        return [
-            {
+        result_list = []
+        for entry in self._compressed_trace_buffer:
+            entry_dict = {
                 "step": entry.step,
                 "input_token_count": entry.input_token_count,
                 "compressed_token_count": entry.compressed_token_count,
@@ -184,8 +133,8 @@ class LLMOrchestrator:
                     _serialize_message(msg) for msg in entry.compressed_messages
                 ],
             }
-            for entry in self._compressed_trace_buffer
-        ]
+            result_list.append(entry_dict)
+        return result_list
 
     def set_active_context(self, model_key: str, memory_key: str):
         """
@@ -290,6 +239,17 @@ class LLMOrchestrator:
             input_messages, model_name=model_def.litellm_name
         )
 
+        if self._trace_step_counter == 0:
+            first_trace_entry = TraceHistoryEntry(
+                step=0,
+                input_token_count=input_token_count,
+                compressed_token_count=0,
+                compression_ratio=1.0,
+                memory_method=self.active_memory_key,
+                compressed_messages=input_messages,
+            )
+            self._compressed_trace_buffer.append(first_trace_entry)
+
         # Apply memory processing
         compressed_view, compressed_token_count = self.memory_processor.apply_strategy(
             input_messages,
@@ -310,13 +270,13 @@ class LLMOrchestrator:
 
         # Record compressed trace entry for this call
         self._trace_step_counter += 1
-        trace_entry = CompressedTraceEntry(
+        trace_entry = TraceHistoryEntry(
             step=self._trace_step_counter,
             input_token_count=input_token_count,
             compressed_token_count=compressed_token_count,
             compression_ratio=compression_ratio,
             memory_method=self.active_memory_key,
-            compressed_messages=compressed_view,
+            compressed_messages=copy.deepcopy(compressed_view),
         )
         self._compressed_trace_buffer.append(trace_entry)
 
