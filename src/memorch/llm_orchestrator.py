@@ -1,3 +1,4 @@
+import copy
 import litellm
 import weave
 import os
@@ -275,7 +276,7 @@ class LLMOrchestrator:
             compressed_token_count=compressed_token_count,
             compression_ratio=compression_ratio,
             memory_method=self.active_memory_key,
-            compressed_messages=compressed_view,
+            compressed_messages=copy.deepcopy(compressed_view),
         )
         self._compressed_trace_buffer.append(trace_entry)
 
