@@ -6,6 +6,11 @@ def detect_tail_loop(messages: List[Dict], threshold: int = 4, max_pattern_len: 
     # Optimization: Don't check if history is too short to contain a loop
     if n < threshold:
         return False
+    
+    if n > 150:
+        # There should never be more than 150 messages in the history.
+        # Skipping this case
+        return False
 
     # 1. Normalize messages for comparison
     # We must exclude fields that change every turn even in a loop (like tool_call_id)
