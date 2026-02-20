@@ -17,6 +17,9 @@ def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
         candidate_from_root = repo_root / prompt_path
         if candidate_from_root.is_file():
             return candidate_from_root
+        candidate_from_site_packages = repo_root / ".venv" / "lib" / "python3.13" / "site-packages" / "memorch" / "strategies" / "progressive_summarization" / "prog_sum.prompt.md"
+        if candidate_from_site_packages.is_file():
+            return candidate_from_site_packages
     return repo_root / "src/memorch/strategies/progressive_summarization/prog_sum.prompt.md"
 
 
