@@ -11,6 +11,8 @@ from memorch.strategies.truncation.truncation import truncate_messages
 from memorch.strategies.ace.ace_strategy import ACEState, apply_ace_strategy
 from memorch.strategies.memory_bank import MemoryBankState, apply_memory_bank_strategy
 
+from memorch.llm_orchestrator import LLMOrchestrator
+
 logger = get_logger("MemoryProcessor")
 
 
@@ -35,7 +37,7 @@ class MemoryProcessor:
         messages: List[Dict],
         memory_key: str,
         input_token_count: int,
-        llm_client: Optional[Any] = None,
+        llm_client: LLMOrchestrator,
     ) -> Tuple[List[Dict], Optional[int]]:
         """
         Apply the configured memory strategy to the incoming messages.
@@ -44,8 +46,13 @@ class MemoryProcessor:
         logger.debug(f"🧠 Applying Memory Strategy: {settings.type}")
 
         # Loop detection to prevent infinite context growth
-        if len(messages) > 20 and detect_tail_loop(
-            messages, threshold=4, max_pattern_len=5
+        if llm_client._compressed_trace_buffer:
+            all_messages = llm_client._compressed_trace_buffer
+        else:
+            all_messages = messages
+
+        if len(all_messages) > 20 and detect_tail_loop(
+            all_messages, threshold=4, max_pattern_len=5
         ):
             logger.error(
                 f"🚨 Infinite loop detected in last {len(messages)} messages. Aborting."

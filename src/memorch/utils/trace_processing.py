@@ -1,13 +1,15 @@
 from typing import List, Dict
+from memorch.utils.trace_history import TraceHistoryEntry
 
-def detect_tail_loop(messages: List[Dict], threshold: int = 4, max_pattern_len: int = 10) -> bool:
+
+def detect_tail_loop(messages: List[Dict] | List[TraceHistoryEntry], threshold: int = 4, max_pattern_len: int = 10) -> bool:
     """Detects repeating patterns at the tail of a conversation."""
     n = len(messages)
     # Optimization: Don't check if history is too short to contain a loop
     if n < threshold:
         return False
     
-    if n > 150:
+    if n > 150: 
         # There should never be more than 150 messages in the history.
         # Skipping this case
         return True
@@ -18,6 +20,7 @@ def detect_tail_loop(messages: List[Dict], threshold: int = 4, max_pattern_len: 
     for m in messages[-(max_pattern_len * threshold):]: # Only look at the relevant tail
         # Create a signature tuple: (Role, Content, Sorted Tool Calls)
         tool_sig = None
+        assert isinstance(m, dict),  "Message must be dict or TraceHistoryEntry"
         if "tool_calls" in m:
             tool_sig = sorted(
                 [(tc["type"], tc["function"]["name"], tc["function"]["arguments"]) for tc in m["tool_calls"]]
