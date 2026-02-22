@@ -22,6 +22,7 @@ from memorch.api.models import (
     Item,
 )
 from memorch.api.translator import chat_completions_to_items, items_to_chat_completions
+from memorch.exceptions import LoopDetectedError
 from memorch.llm_orchestrator import LLMOrchestrator
 from memorch.utils.logger import get_logger
 
@@ -195,6 +196,18 @@ async def create_response(
             parallel_tool_calls=request.parallel_tool_calls,
             metadata=request.metadata,
             debug_info=debug_info,
+        )
+
+    except LoopDetectedError as e:
+        logger.error(f"Loop detected - request failed: {e}")
+        return OpenResponsesResponse(
+            id=response_id,
+            created_at=created_at,
+            completed_at=int(time.time()),
+            status=ResponseStatus.failed,
+            model=request.model,
+            output=[],
+            error={"type": "loop_detected_error", "message": str(e)},
         )
 
     except Exception as e:

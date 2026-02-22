@@ -1,6 +1,7 @@
 import weave
 from typing import Any, Dict, List, Optional, Tuple
 
+from memorch.exceptions import LoopDetectedError
 from memorch.utils.logger import get_logger
 from memorch.utils.token_count import get_token_count
 from memorch.utils.trace_processing import detect_tail_loop
@@ -51,13 +52,13 @@ class MemoryProcessor:
             logger.error(
                 f"🚨 Infinite loop detected in last {len(messages)} messages. Aborting."
             )
-            return [
-                {"role": "system", "content": "Infinite loop detected; aborting."}
-            ], None
+            raise LoopDetectedError(
+                f"Infinite loop detected in last {len(messages)} messages."
+            )
 
         ### MEMORY STRATEGY APPLICATION LOGIC ###
         #########################################
-        
+
         ## STRATEGIES APPLIED REGARDLESS OF TOKEN COUNT ##
         if settings.type == "ace":
             processed_messages, output_token_count = self._apply_ace(
@@ -76,7 +77,6 @@ class MemoryProcessor:
                 llm_client=llm_client,
             )
             return processed_messages, output_token_count
-        
 
         ## STRATEGIES APPLIED BASED ON TOKEN COUNT ##
         if input_token_count < self.config.compact_threshold:
@@ -88,8 +88,7 @@ class MemoryProcessor:
             # Truncation
             if settings.type == "truncation":
                 processed_messages, output_token_count = self._apply_truncation(
-                    messages=messages, 
-                    token_count=input_token_count
+                    messages=messages, token_count=input_token_count
                 )
             # Progressive Summarization
             elif settings.type == "progressive_summarization":
@@ -112,11 +111,9 @@ class MemoryProcessor:
 
     @weave.op(enable_code_capture=False)
     def _apply_truncation(
-        self, 
-        messages: List[Dict], 
-        token_count: int
+        self, messages: List[Dict], token_count: int
     ) -> Tuple[List[Dict], int]:
-        """Applies Truncation to a message trace by cutting conversation history, 
+        """Applies Truncation to a message trace by cutting conversation history,
         keeping only the last user query and tool interaction."""
         logger.debug(
             f"🧠 Applying Truncation Strategy. Current query with {token_count} tokens"
@@ -160,11 +157,7 @@ class MemoryProcessor:
         logger.debug(
             f"🧠 Applying ACE Strategy. Current query with {token_count} tokens"
         )
-        processed = apply_ace_strategy(
-            messages, 
-            llm_client, 
-            settings, self._ace_state
-        )
+        processed = apply_ace_strategy(messages, llm_client, settings, self._ace_state)
         return processed, get_token_count(processed)
 
     @weave.op(enable_code_capture=False)
