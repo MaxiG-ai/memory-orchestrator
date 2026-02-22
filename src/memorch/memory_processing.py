@@ -11,8 +11,6 @@ from memorch.strategies.truncation.truncation import truncate_messages
 from memorch.strategies.ace.ace_strategy import ACEState, apply_ace_strategy
 from memorch.strategies.memory_bank import MemoryBankState, apply_memory_bank_strategy
 
-from memorch.llm_orchestrator import LLMOrchestrator
-
 logger = get_logger("MemoryProcessor")
 
 
