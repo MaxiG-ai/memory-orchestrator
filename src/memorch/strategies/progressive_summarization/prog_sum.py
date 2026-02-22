@@ -9,24 +9,17 @@ logger = get_logger("ProgressiveSummarization")
 
 
 def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
-    repo_root = Path(__file__).resolve().parents[4]
+    """Resolve path to the summarization prompt file.
+
+    Falls back to the default prog_sum.prompt.md co-located with this module,
+    which works correctly both in src-layout dev checkouts and when installed
+    as a library.
+    """
     if prompt_path:
         candidate = Path(prompt_path)
         if candidate.is_file():
             return candidate
-        candidate_from_root = repo_root / prompt_path
-        if candidate_from_root.is_file():
-            return candidate_from_root
-        candidate_from_site_packages = repo_root / ".venv" / "lib" / "python3.13" / "site-packages" / "memorch" / "strategies" / "progressive_summarization" / "prog_sum.prompt.md"
-        if candidate_from_site_packages.is_file():
-            return candidate_from_site_packages
-    else:
-        candidate_from_site_packages = repo_root / ".venv" / "lib" / "python3.13" / "site-packages" / "memorch" / "strategies" / "progressive_summarization" / "prog_sum.prompt.md"
-        if candidate_from_site_packages.is_file():
-            return candidate_from_site_packages
-        else:
-            logger.warning(f"Could not resolve prompt path: {prompt_path}")
-    return repo_root / "src/memorch/strategies/progressive_summarization/prog_sum.prompt.md"
+    return Path(__file__).parent / "prog_sum.prompt.md"
 
 
 def summarize_conv_history(
@@ -36,9 +29,9 @@ def summarize_conv_history(
     summary_prompt_path: Optional[str] = None,
 ) -> List[Dict]:
     """
-    Splitting a message trace into user query and conversation history, then summarizing the conversation history using an LLM, 
+    Splitting a message trace into user query and conversation history, then summarizing the conversation history using an LLM,
     and finally returning a new message list that includes the summary and the user query.
-    
+
     :param messages: Description
     :type messages: List[Dict]
     :param llm_client: Description
@@ -68,8 +61,7 @@ def summarize_conv_history(
 
     # Call LLM to generate summary
     response = llm_client.generate_plain(
-        input_messages=prompt_messages, 
-        model=summarizer_model
+        input_messages=prompt_messages, model=summarizer_model
     )
     summary_text = extract_content(response)
 
