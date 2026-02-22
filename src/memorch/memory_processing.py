@@ -35,7 +35,7 @@ class MemoryProcessor:
         messages: List[Dict],
         memory_key: str,
         input_token_count: int,
-        llm_client: LLMOrchestrator,
+        llm_client: Optional[Any] = None,
     ) -> Tuple[List[Dict], Optional[int]]:
         """
         Apply the configured memory strategy to the incoming messages.
