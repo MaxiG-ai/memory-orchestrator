@@ -239,6 +239,7 @@ class LLMOrchestrator:
             input_messages, model_name=model_def.litellm_name
         )
 
+
         if self._trace_step_counter == 0:
             first_trace_entry = TraceHistoryEntry(
                 step=0,
@@ -282,6 +283,9 @@ class LLMOrchestrator:
 
         # Sanitize kwargs (remove model if passed by benchmark)
         kwargs.pop("model", None)
+
+        # Hard limit for messages to prevent infinite loops
+        assert len(compressed_view) <= 40, "Too many messages after memory processing, potential loop detected."
 
         try:
             # Build request parameters

@@ -46,13 +46,9 @@ class MemoryProcessor:
         logger.debug(f"🧠 Applying Memory Strategy: {settings.type}")
 
         # Loop detection to prevent infinite context growth
-        if llm_client._compressed_trace_buffer:
-            all_messages = llm_client._compressed_trace_buffer
-        else:
-            all_messages = messages
-
-        if len(all_messages) > 20 and detect_tail_loop(
-            all_messages, threshold=4, max_pattern_len=5
+        # Pure rate limit is in llm_orchestrator, this should prevent loops before hard limit
+        if len(messages) > 20 and detect_tail_loop(
+            messages, threshold=4, max_pattern_len=5
         ):
             logger.error(
                 f"🚨 Infinite loop detected in last {len(messages)} messages. Aborting."
