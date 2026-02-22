@@ -11,6 +11,7 @@ from openai.types.chat import (
     ChatCompletionToolParam,
     ChatCompletion,
 )
+from memorch.exceptions import LoopDetectedError
 from memorch.utils.config import load_configs, ExperimentConfig, ModelDef
 from memorch.memory_processing import MemoryProcessor
 from memorch.utils.token_count import get_token_count
@@ -18,7 +19,8 @@ from memorch.utils.logger import get_logger
 from memorch.utils.trace_history import TraceHistoryEntry, _serialize_message
 
 logger = get_logger("Orchestrator")
-    
+
+
 @dataclass
 class CompressionMetadata:
     """Metadata about memory compression applied during request processing.
@@ -239,7 +241,6 @@ class LLMOrchestrator:
             input_messages, model_name=model_def.litellm_name
         )
 
-
         if self._trace_step_counter == 0:
             first_trace_entry = TraceHistoryEntry(
                 step=0,
@@ -252,12 +253,18 @@ class LLMOrchestrator:
             self._compressed_trace_buffer.append(first_trace_entry)
 
         # Apply memory processing
-        compressed_view, compressed_token_count = self.memory_processor.apply_strategy(
-            input_messages,
-            self.active_memory_key,
-            input_token_count=input_token_count,
-            llm_client=self,
-        )
+        try:
+            compressed_view, compressed_token_count = (
+                self.memory_processor.apply_strategy(
+                    input_messages,
+                    self.active_memory_key,
+                    input_token_count=input_token_count,
+                    llm_client=self,
+                )
+            )
+        except LoopDetectedError as e:
+            logger.error(f"🚨 Loop detected during memory processing: {str(e)}")
+            raise e
 
         # Calculate compression metrics
         if compressed_token_count is None:
@@ -285,7 +292,9 @@ class LLMOrchestrator:
         kwargs.pop("model", None)
 
         # Hard limit for messages to prevent infinite loops
-        assert len(compressed_view) <= 40, "Too many messages after memory processing, potential loop detected."
+        assert len(compressed_view) <= 40, (
+            "Too many messages after memory processing, potential loop detected."
+        )
 
         try:
             # Build request parameters
@@ -322,9 +331,11 @@ class LLMOrchestrator:
                     loop_detected=False,
                     strategy_metadata={},
                     compressed_messages=compressed_view
-                    if kwargs.get("include_messages") else None,
+                    if kwargs.get("include_messages")
+                    else None,
                     original_messages=input_messages
-                    if kwargs.get("include_messages") else None,
+                    if kwargs.get("include_messages")
+                    else None,
                 )
                 return response, metadata
 
