@@ -37,9 +37,20 @@ class MemoryProcessor:
         memory_key: str,
         input_token_count: int,
         llm_client: Optional[Any] = None,
+        compact_threshold: Optional[int] = None,
     ) -> Tuple[List[Dict], Optional[int]]:
         """
         Apply the configured memory strategy to the incoming messages.
+
+        Args:
+            messages: Conversation message list.
+            memory_key: Key into config.memory_strategies selecting the active strategy.
+            input_token_count: Token count of the current context.
+            llm_client: LLM client used by strategies that make their own LLM calls.
+            compact_threshold: Per-call threshold override. When provided, supersedes
+                the global ``config.compact_thresholds`` value for this invocation.
+                Only relevant for threshold-sensitive strategies (truncation,
+                progressive_summarization). ace and memory_bank ignore it.
         """
         settings = self.config.memory_strategies[memory_key]
         logger.debug(f"🧠 Applying Memory Strategy: {settings.type}")
@@ -79,11 +90,17 @@ class MemoryProcessor:
             return processed_messages, output_token_count
 
         ## STRATEGIES APPLIED BASED ON TOKEN COUNT ##
-        if input_token_count < self.config.compact_threshold:
+        # Caller must supply the threshold; it is one value from config.compact_thresholds,
+        # iterated externally so each threshold value produces a distinct experiment run.
+        if compact_threshold is None:
+            raise ValueError(
+                f"compact_threshold must be provided for threshold-sensitive strategy '{settings.type}'"
+            )
+        if input_token_count < compact_threshold:
             return messages, input_token_count
         else:
             logger.debug(
-                f"🧠 Pre-Processing Token Count: {input_token_count}, exceeds compact_threshold={self.config.compact_threshold}"
+                f"🧠 Pre-Processing Token Count: {input_token_count}, exceeds compact_threshold={compact_threshold}"
             )
             # Truncation
             if settings.type == "truncation":

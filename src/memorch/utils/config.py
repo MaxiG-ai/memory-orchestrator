@@ -53,7 +53,7 @@ class ExperimentConfig(BaseModel):
     selected_test_cases: Optional[List[str]] = None
     enabled_models: List[str]
     enabled_memory_methods: List[str]
-    compact_threshold: int
+    compact_thresholds: List[int]
 
     # Maps strategy name -> config
     memory_strategies: Dict[str, MemoryDef]

@@ -82,6 +82,8 @@ class LLMOrchestrator:
         # State variables (mutable)
         self.active_model_key: str = self.cfg.enabled_models[0]
         self.active_memory_key: str = self.cfg.enabled_memory_methods[0]
+        # Active threshold for the current run; None means strategy is threshold-insensitive.
+        self.active_compact_threshold: Optional[int] = None
 
         # Session-level trace buffer for compressed messages
         # Collects memory-processed messages for each LLM call within a session
@@ -138,7 +140,9 @@ class LLMOrchestrator:
             result_list.append(entry_dict)
         return result_list
 
-    def set_active_context(self, model_key: str, memory_key: str):
+    def set_active_context(
+        self, model_key: str, memory_key: str, compact_threshold: Optional[int] = None
+    ):
         """
         HOTSWAP: Updates the active configuration for the next request.
         Call this inside your experiment loop to switch configurations.
@@ -146,6 +150,9 @@ class LLMOrchestrator:
         Args:
             model_key: Model identifier from model_config.toml
             memory_key: Memory strategy from config.toml
+            compact_threshold: Token threshold for this run. Required for
+                threshold-sensitive strategies (truncation, progressive_summarization);
+                ignored by ace, memory_bank, and no_strategy.
 
         Raises:
             ValueError: If model or memory strategy not found
@@ -157,6 +164,7 @@ class LLMOrchestrator:
 
         self.active_model_key = model_key
         self.active_memory_key = memory_key
+        self.active_compact_threshold = compact_threshold
 
         logger.info("🔄 Context Switched")
 
@@ -260,6 +268,7 @@ class LLMOrchestrator:
                     self.active_memory_key,
                     input_token_count=input_token_count,
                     llm_client=self,
+                    compact_threshold=self.active_compact_threshold,
                 )
             )
         except LoopDetectedError as e:
