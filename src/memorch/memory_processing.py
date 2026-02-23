@@ -88,6 +88,12 @@ class MemoryProcessor:
                 llm_client=llm_client,
             )
             return processed_messages, output_token_count
+        
+        if settings.type == "no_strategy":
+            logger.warning(
+                    f"🧠 Unknown memory strategy type: {settings.type}. Applying no_strategy; returning original messages."
+            )
+            return messages, input_token_count
 
         ## STRATEGIES APPLIED BASED ON TOKEN COUNT ##
         # Caller must supply the threshold; it is one value from config.compact_thresholds,
@@ -118,11 +124,7 @@ class MemoryProcessor:
                     )
                 )
             else:
-                logger.warning(
-                    f"🧠 Unknown memory strategy type: {settings.type}. Applying no_strategy; returning original messages."
-                )
-                output_token_count = input_token_count
-                return messages, output_token_count
+                raise ValueError(f"Unknown memory strategy type: {settings.type}")
 
         return processed_messages, output_token_count
 
