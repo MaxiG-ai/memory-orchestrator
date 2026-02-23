@@ -438,7 +438,7 @@ class TestRetrieval:
             },
         ]
 
-        formatted = format_retrieved_memory_message(records)[0].get("content", "")  
+        formatted = format_retrieved_memory_message(records)[0].get("content", "")
 
         assert "[RETRIEVED RECORD 1]" in formatted
         assert "[RETRIEVED RECORD 2]" in formatted

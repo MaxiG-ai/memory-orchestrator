@@ -88,7 +88,7 @@ def format_retrieved_memory_message(records: List[Dict[str, Any]]) -> List[Dict[
         records: List of {trace_id, summary, raw_data} dicts
 
     Returns:
-        Formatted string for context window, or empty string if no records
+        List of message dictionaries for context injection, or empty list if no records
     """
     if not records:
         return []
@@ -101,7 +101,8 @@ Raw Data: {record["raw_data"]}
 -------------------"""
         sections.append(section)
 
+    header = "## Retrieved Context from Previous Steps\n\n"
     messages = [
-        {"role": "system", "content": "\n".join(sections)}
+        {"role": "system", "content": header + "\n".join(sections)}
     ]
-    return messages 
+    return messages
