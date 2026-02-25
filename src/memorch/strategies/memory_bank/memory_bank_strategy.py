@@ -154,7 +154,7 @@ def apply_memory_bank_strategy(
 
     # Extract and ingest new tool outputs
     tool_outputs = extract_tool_outputs(messages)
-    if tool_outputs and state.insight_store:
+    if tool_outputs:
         observer_model = getattr(settings, "observer_model", "gpt-4-1")
         trace_ids = ingest_tool_outputs(
             tool_outputs=tool_outputs,
@@ -166,8 +166,6 @@ def apply_memory_bank_strategy(
             step_id=state.step_count,
         )
         logger.debug(f"Ingested {len(trace_ids)} tool outputs")
-    else:
-        raise NotImplementedError("InsightStore not initialized for ingestion")
 
     # First step or no history → pass through unchanged
     if state.insight_store.is_empty():

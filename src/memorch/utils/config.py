@@ -56,7 +56,7 @@ class ExperimentConfig(BaseModel):
     compact_thresholds: List[int]
 
     # Haystack experiment settings
-    max_messages_after_compression: Optional[int] = 40  # None disables the check
+    max_messages_after_compression: Optional[int] = None  # None disables the check
     haystack_thresholds: Optional[List[int]] = None  # token count targets for haystack
 
     # Maps strategy name -> config
