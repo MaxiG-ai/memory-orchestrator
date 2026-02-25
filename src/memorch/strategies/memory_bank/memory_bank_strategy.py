@@ -19,8 +19,8 @@ from memorch.strategies.memory_bank.ingestion import (
     ingest_tool_outputs,
 )
 from memorch.strategies.memory_bank.retrieval import (
+    format_retrieved_memory_message,
     retrieve_and_format,
-    format_retrieved_memory,
 )
 from memorch.utils.logger import get_logger
 from memorch.utils.token_count import get_token_count
@@ -141,7 +141,7 @@ def apply_memory_bank_strategy(
     embedding_model_name = getattr(
         settings, "embedding_model", "BAAI/bge-small-en-v1.5"
     )
-    if state.insight_store is None:
+    if not state.insight_store:
         state.initialize_model(embedding_model_name)
 
     logger.debug(f"Memory Bank Strategy - Step {state.step_count}")
@@ -151,8 +151,8 @@ def apply_memory_bank_strategy(
 
     # Extract and ingest new tool outputs
     tool_outputs = extract_tool_outputs(messages)
-    if tool_outputs:
-        observer_model = getattr(settings, "observer_model", "gpt-4-1-mini")
+    if tool_outputs and state.insight_store:
+        observer_model = getattr(settings, "observer_model", "gpt-4-1")
         trace_ids = ingest_tool_outputs(
             tool_outputs=tool_outputs,
             user_query=user_query_text,
@@ -163,6 +163,8 @@ def apply_memory_bank_strategy(
             step_id=state.step_count,
         )
         logger.debug(f"Ingested {len(trace_ids)} tool outputs")
+    else:
+        raise NotImplementedError("InsightStore not initialized for ingestion")
 
     # First step or no history → pass through unchanged
     if state.insight_store.is_empty():
@@ -185,30 +187,15 @@ def apply_memory_bank_strategy(
     user_query_msgs, _ = get_user_message(messages)
     last_tool_msgs, _ = get_last_tool_interaction(messages)
 
-    processed = []
+    # Retrieved Memory
+    memory_content = format_retrieved_memory_message(retrieved)
+    logger.debug(f"Added {len(retrieved)} retrieved records to context")
 
-    # Part 1: Anchor (user's original task)
-    if user_query_msgs:
-        processed.extend(user_query_msgs)
+    processed_messages = user_query_msgs + memory_content + last_tool_msgs
 
-    # Part 2: Retrieved Memory
-    if retrieved:
-        memory_content = format_retrieved_memory(retrieved)
-        processed.append(
-            {
-                "role": "system",
-                "content": f"## Retrieved Context from Previous Steps\n\n{memory_content}",
-            }
-        )
-        logger.debug(f"Added {len(retrieved)} retrieved records to context")
-
-    # Part 3: Working Memory (last tool interaction only)
-    if last_tool_msgs:
-        processed.extend(last_tool_msgs)
-
-    token_count = get_token_count(processed)
+    token_count = get_token_count(processed_messages)
     logger.debug(
-        f"Context constructed: {len(processed)} messages, {token_count} tokens"
+        f"Context constructed: {len(processed_messages)} messages, {token_count} tokens"
     )
 
-    return processed, token_count
+    return processed_messages, token_count
