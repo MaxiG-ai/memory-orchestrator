@@ -300,10 +300,12 @@ class LLMOrchestrator:
         # Sanitize kwargs (remove model if passed by benchmark)
         kwargs.pop("model", None)
 
-        # Hard limit for messages to prevent infinite loops
-        assert len(compressed_view) <= 40, (
-            "Too many messages after memory processing, potential loop detected."
-        )
+        # Configurable limit for messages to prevent infinite loops
+        msg_limit = self.cfg.max_messages_after_compression
+        if msg_limit is not None:
+            assert len(compressed_view) <= msg_limit, (
+                "Too many messages after memory processing, potential loop detected."
+            )
 
         try:
             # Build request parameters

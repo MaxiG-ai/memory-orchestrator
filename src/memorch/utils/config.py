@@ -55,6 +55,10 @@ class ExperimentConfig(BaseModel):
     enabled_memory_methods: List[str]
     compact_thresholds: List[int]
 
+    # Haystack experiment settings
+    max_messages_after_compression: Optional[int] = 40  # None disables the check
+    haystack_thresholds: Optional[List[int]] = None  # token count targets for haystack
+
     # Maps strategy name -> config
     memory_strategies: Dict[str, MemoryDef]
 
