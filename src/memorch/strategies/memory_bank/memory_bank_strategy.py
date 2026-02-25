@@ -7,6 +7,7 @@ Implements automatic retrieval-augmented context compression:
 3. Construct context: user_query + retrieved_memory + last_tool_interaction
 """
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -27,6 +28,9 @@ from memorch.utils.token_count import get_token_count
 from memorch.utils.split_trace import get_user_message, get_last_tool_interaction
 
 logger = get_logger("MemoryBankStrategy")
+
+# Create a lock to ensure thread-safe model loading in case of concurrent tasks
+_model_load_lock = threading.Lock()
 
 # Fixed retrieval query per spec
 RETRIEVAL_QUERY = "how to proceed with the task"
@@ -69,11 +73,12 @@ class MemoryBankState:
             Initialized MemoryBankState with loaded embedding model
         """
         logger.info(f"Loading embedding model: {embedding_model_name}")
-        model = FlagModel(
-            embedding_model_name,
-            query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
-            use_fp16=True,
-        )
+        with _model_load_lock:
+            model = FlagModel(
+                embedding_model_name,
+                query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
+                use_fp16=True,
+            )
         state = cls(_embedding_model=model)
         state.insight_store = InsightStore(embedding_model=model)
         return state
@@ -87,11 +92,12 @@ class MemoryBankState:
         """
         if self._embedding_model is None:
             logger.info(f"Loading embedding model: {embedding_model_name}")
-            self._embedding_model = FlagModel(
-                embedding_model_name,
-                query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
-                use_fp16=True,
-            )
+            with _model_load_lock:
+                self._embedding_model = FlagModel(
+                    embedding_model_name,
+                    query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
+                    use_fp16=True,
+                )
             self.insight_store = InsightStore(embedding_model=self._embedding_model)
 
     def reset(self) -> None:
