@@ -22,7 +22,23 @@ def get_user_message(messages: List[Dict]) -> Tuple[List[Dict], List[int]]:
             user_messages.append(msg)
             user_messages_idx.append(i)
     
-    return user_messages, user_messages_idx 
+    return user_messages, user_messages_idx
+
+
+def get_first_user_text(messages: List[Dict]) -> str:
+    """Return the content string of the first user message, or '' if none.
+
+    Convenience wrapper around get_user_message that extracts the plain text
+    content so callers don't need to unpack a tuple and index into the list.
+
+    Args:
+        messages: List of message dictionaries
+
+    Returns:
+        Content string of the first user message, or '' if no user message exists.
+    """
+    user_msgs, _ = get_user_message(messages)
+    return user_msgs[0].get("content", "") if user_msgs else ""
 
 
 def get_last_tool_interaction(messages: List[Dict]) -> Tuple[List[Dict], int]:
@@ -71,101 +87,8 @@ def get_last_tool_interaction(messages: List[Dict]) -> Tuple[List[Dict], int]:
     return last_interaction
 
 
-def process_and_split_trace_user(messages: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
-    """Split a trace into the last user message and everything *after* it.
-
-    Note:
-        In ComplexFuncBench traces there is typically a single initial user message
-        followed by system/assistant/tool traffic. This helper is used to isolate
-        that user message and return the remainder of the trace.
-    
-    Args:
-        messages: List of message dictionaries
-        
-    Returns:
-        Tuple of ([last_user_message], messages_after_last_user)
-        If no user message found, returns ([], all_messages)
-    """
-    if not messages:
-        return [], []
-    
-    user_messages, user_message_idx = get_user_message(messages)
-    
-    if not user_messages:
-        return [], messages
-
-    conv_after_user_message = messages[user_message_idx[-1] + 1 :]
-    
-    return [user_messages[-1]], conv_after_user_message
-
-# Use by prog_sum
-def process_full_trace_split_user(messages: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
-    """Process a full trace and split into user messages and non-user messages.
-    
-    This is a simpler split that just separates out all user messages from the rest of the trace, without assuming any order.
-    
-    Args:
-        messages: List of message dictionaries
-    Returns:
-        Tuple of (user_messages, non_user_messages) where:
-        - user_messages: List of all messages with role "user"
-        - non_user_messages: List of all messages that are not from the user
-    """
-    assert messages is not None, "Messages list cannot be None"
-    
-    user_messages = []
-    non_user_messages = []
-    
-    for msg in messages:
-        if msg.get("role") == "user":
-            user_messages.append(msg)
-        else:
-            non_user_messages.append(msg)
-    
-    return user_messages, non_user_messages
-
-
-def process_and_split_trace_user_tool(messages: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
-    """Process and split the trace into first user message, intermediate messages, and last tool episode.
-    
-    This function performs a 3-way split of the conversation:
-    - First user message (the initial query)
-    - Intermediate messages (between first user and the tool episode)
-    - Last tool episode (assistant with tool_calls + tool responses)
-    
-    Args:
-        messages: List of message dictionaries
-        
-    Returns:
-        Tuple of ([first_user_message], intermediate_messages, last_tool_episode)
-        where:
-        - first_user_message: List with the first user message (empty if not found)
-        - intermediate_messages: All messages between first user and tool episode
-        - last_tool_episode: The last valid tool episode (empty if not found)
-    """
-    if not messages:
-        return [], [], []
-    
-    # Get all user messages and use the first one
-    user_messages, user_messages_idx = get_user_message(messages)
-    
-    # Extract the last valid tool episode and its start index
-    last_tool_episode, tool_episode_start_idx = get_last_tool_interaction(messages)
-    
-    if not user_messages:
-        return [], messages[:tool_episode_start_idx], last_tool_episode
-
-    # Intermediate messages are between first user and the tool episode start
-    intermediate_start = user_messages_idx[0] + 1
-    intermediate_end = tool_episode_start_idx if last_tool_episode else len(messages)
-    intermediate_messages = messages[intermediate_start:intermediate_end]
-    
-    return [user_messages[0]], intermediate_messages, last_tool_episode
-
-
 def extract_tool_outputs(messages: List[Dict]) -> List[Tuple[str, Dict, Dict]]:
-    """
-    Extract tool call information from the latest tool interaction in messages.
+    """Extract tool call information from the latest tool interaction in messages.
 
     Parses assistant messages with tool_calls and subsequent tool responses
     to extract (tool_name, raw_input, raw_output) tuples.

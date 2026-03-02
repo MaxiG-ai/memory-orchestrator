@@ -12,6 +12,7 @@ from memorch.strategies.memory_bank.retrieval import (
 )
 from memorch.utils.split_trace import (
     get_user_message,
+    get_first_user_text,
     get_last_tool_interaction,
     extract_tool_outputs,
 )
@@ -98,13 +99,6 @@ class MemoryBankState:
         logger.debug("MemoryBankState reset")
 
 
-def _get_user_query_text(messages: List[Dict]) -> str:
-    """Extract user query text from messages."""
-    user_msgs, _ = get_user_message(messages)
-    if user_msgs:
-        return user_msgs[0].get("content", "")
-    return ""
-
 
 def apply_memory_bank_strategy(
     messages: List[Dict],
@@ -145,7 +139,7 @@ def apply_memory_bank_strategy(
     logger.debug(f"Memory Bank Strategy - Step {state.step_count}")
 
     # Extract user query for Observer context
-    user_query_text = _get_user_query_text(messages)
+    user_query_text = get_first_user_text(messages)
 
     # In case the insight store is empty, we should ingest all exisiting tool outputs in messages
     if state.insight_store.is_empty():

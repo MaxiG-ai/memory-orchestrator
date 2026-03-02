@@ -1,8 +1,8 @@
 from memorch.utils.split_trace import (
     get_user_message,
+    get_first_user_text,
     get_last_tool_interaction,
-    process_and_split_trace_user,
-    process_and_split_trace_user_tool,
+    extract_tool_outputs,
 )
 
 
@@ -162,148 +162,135 @@ def test_get_last_tool_interaction_no_preceding_assistant() -> None:
     assert idx == len(messages)
 
 
-# Tests for process_and_split_trace_user
-def test_process_and_split_trace_user_simple() -> None:
-    """Test simple 2-way split (last user + messages after)."""
+
+# Tests for get_first_user_text
+def test_get_first_user_text_returns_first_user_content() -> None:
+    """get_first_user_text should return the content of the first user message when
+    multiple user messages are present, ignoring any subsequent ones.
+    """
     messages = [
         _make_message("system", "System prompt"),
         _make_message("user", "First question"),
-        _make_message("assistant", "First answer"),
+        _make_message("assistant", "Answer"),
         _make_message("user", "Second question"),
     ]
-    
-    user_messages, rest = process_and_split_trace_user(messages)
-    
-    # process_and_split_trace_user returns [user_messages[-1]]
-    assert len(user_messages) == 1
-    assert user_messages[0]["role"] == "user"
-    assert user_messages[0]["content"] == "Second question"
-    assert rest == []
+    assert get_first_user_text(messages) == "First question"
 
 
-def test_process_and_split_trace_user_no_user() -> None:
-    """Test when no user message exists."""
+def test_get_first_user_text_no_user_returns_empty_string() -> None:
+    """get_first_user_text should return an empty string when there are no user
+    messages, so callers can treat the result as a plain string without None checks.
+    """
     messages = [
         _make_message("system", "System prompt"),
         _make_message("assistant", "Hello"),
     ]
-    
-    user_messages, rest = process_and_split_trace_user(messages)
-    
-    assert user_messages == []
-    assert len(rest) == 2
+    assert get_first_user_text(messages) == ""
 
 
-def test_process_and_split_trace_user_empty() -> None:
-    """Test with empty messages."""
-    user_messages, rest = process_and_split_trace_user([])
-    
-    assert user_messages == []
-    assert rest == []
+def test_get_first_user_text_empty_messages_returns_empty_string() -> None:
+    """get_first_user_text should handle an empty message list gracefully and return ''."""
+    assert get_first_user_text([]) == ""
 
 
-def test_process_and_split_trace_user_only_user() -> None:
-    """Test with only a user message."""
+def test_get_first_user_text_single_user() -> None:
+    """get_first_user_text should return the content when exactly one user message exists."""
     messages = [_make_message("user", "Hello")]
-    
-    user_messages, rest = process_and_split_trace_user(messages)
-    
-    assert len(user_messages) == 1
-    assert user_messages[0]["content"] == "Hello"
-    assert rest == []
+    assert get_first_user_text(messages) == "Hello"
 
 
-# Tests for process_and_split_trace_user_tool
-def test_process_and_split_trace_user_tool_3way() -> None:
-    """Test 3-way split (last user + intermediate + last tool episode)."""
+# Tests for extract_tool_outputs
+def test_extract_tool_outputs_single_call() -> None:
+    """extract_tool_outputs should return a single (tool_name, raw_input, raw_output)
+    tuple when there is exactly one tool call and its corresponding tool response.
+    """
+    import json
     messages = [
-        _make_message("system", "System prompt"),
-        _make_message("user", "First question"),
-        _make_message("assistant", "First answer"),
-        _make_message("user", "Get data"),
+        _make_message("user", "fetch something"),
         _make_message(
             "assistant",
             "Fetching...",
-            tool_calls=[{"id": "tc-1", "type": "function", "function": {"name": "fetch"}}],
+            tool_calls=[{
+                "id": "tc-1",
+                "type": "function",
+                "function": {"name": "fetch_data", "arguments": json.dumps({"url": "http://example.com"})},
+            }],
         ),
-        _make_message("tool", "Result", tool_call_id="tc-1"),
+        _make_message("tool", json.dumps({"result": "data"}), tool_call_id="tc-1"),
     ]
-    
-    user_messages, intermediate, tool_episode = process_and_split_trace_user_tool(messages)
-    
-    # According to new logic, returns First User Message
-    assert len(user_messages) == 1
-    assert user_messages[0]["content"] == "First question"
-    # Intermediate: between first user and tool start (idx=4)
-    # First user at 1. Intermediate start 2. End 4.
-    # [Assistant "First answer", User "Get data"]
-    assert len(intermediate) == 2 
-    assert len(tool_episode) == 2
+
+    outputs = extract_tool_outputs(messages)
+
+    assert len(outputs) == 1
+    tool_name, raw_input, raw_output = outputs[0]
+    assert tool_name == "fetch_data"
+    assert raw_input == {"url": "http://example.com"}
+    assert raw_output == {"result": "data"}
 
 
-def test_process_and_split_trace_user_tool_no_tools() -> None:
-    """Test 3-way split when no tools at end."""
+def test_extract_tool_outputs_multiple_parallel_calls() -> None:
+    """extract_tool_outputs should handle multiple parallel tool calls from a single
+    assistant message, returning one tuple per tool call in encounter order.
+    """
+    import json
     messages = [
-        _make_message("system", "System prompt"),
+        _make_message(
+            "assistant",
+            "Fetching...",
+            tool_calls=[
+                {"id": "tc-1", "type": "function", "function": {"name": "tool_a", "arguments": json.dumps({"x": 1})}},
+                {"id": "tc-2", "type": "function", "function": {"name": "tool_b", "arguments": json.dumps({"y": 2})}},
+            ],
+        ),
+        _make_message("tool", json.dumps({"a": "result"}), tool_call_id="tc-1"),
+        _make_message("tool", json.dumps({"b": "result"}), tool_call_id="tc-2"),
+    ]
+
+    outputs = extract_tool_outputs(messages)
+
+    assert len(outputs) == 2
+    assert outputs[0][0] == "tool_a"
+    assert outputs[0][1] == {"x": 1}
+    assert outputs[1][0] == "tool_b"
+    assert outputs[1][1] == {"y": 2}
+
+
+def test_extract_tool_outputs_no_tool_calls_returns_empty() -> None:
+    """extract_tool_outputs should return an empty list when no assistant message
+    with tool_calls is present in the trace.
+    """
+    messages = [
         _make_message("user", "Hello"),
-        _make_message("assistant", "Hi there!"),
+        _make_message("assistant", "Hi"),
     ]
-    
-    user_messages, intermediate, tool_episode = process_and_split_trace_user_tool(messages)
-    
-    assert len(user_messages) == 1
-    assert user_messages[0]["content"] == "Hello"
-    assert len(intermediate) == 1  # just assistant
-    assert tool_episode == []
+    assert extract_tool_outputs(messages) == []
 
 
-def test_process_and_split_trace_user_tool_empty() -> None:
-    """Test 3-way split with empty messages."""
-    user_messages, intermediate, tool_episode = process_and_split_trace_user_tool([])
-    
-    assert user_messages == []
-    assert intermediate == []
-    assert tool_episode == []
+def test_extract_tool_outputs_empty_messages_returns_empty() -> None:
+    """extract_tool_outputs should handle an empty message list by returning []."""
+    assert extract_tool_outputs([]) == []
 
 
-def test_process_and_split_trace_user_tool_corrupted_tools() -> None:
-    """Test 3-way split with previously corrupted tool calls (now accepted)."""
+def test_extract_tool_outputs_non_json_tool_response() -> None:
+    """extract_tool_outputs should handle tool responses that are not valid JSON,
+    storing them under the '_raw' key in the raw_output dict.
+    """
+    import json
     messages = [
-        _make_message("system", "System prompt"),
-        _make_message("user", "Get data"),
         _make_message(
             "assistant",
-            "Fetching...",
-            tool_calls=[{"_type": "ToolCall", "id": "tc-1"}],
+            "Running...",
+            tool_calls=[{
+                "id": "tc-1",
+                "type": "function",
+                "function": {"name": "run_cmd", "arguments": json.dumps({"cmd": "ls"})},
+            }],
         ),
-        _make_message("tool", "Result", tool_call_id="tc-1"),
+        _make_message("tool", "not json at all", tool_call_id="tc-1"),
     ]
-    
-    user_messages, intermediate, tool_episode = process_and_split_trace_user_tool(messages)
-    
-    assert len(user_messages) == 1
-    assert user_messages[0]["content"] == "Get data"
-    # Intermediate = [] (User at 1, Tool at 2. 2:2)
-    assert len(intermediate) == 0
-    assert len(tool_episode) == 2
 
+    outputs = extract_tool_outputs(messages)
 
-def test_process_and_split_trace_user_tool_no_user_before_tools() -> None:
-    """Test 3-way split when no user message before tool episode."""
-    messages = [
-        _make_message("system", "System prompt"),
-        _make_message(
-            "assistant",
-            "Fetching...",
-            tool_calls=[{"id": "tc-1", "type": "function", "function": {"name": "fetch"}}],
-        ),
-        _make_message("tool", "Result", tool_call_id="tc-1"),
-    ]
-    
-    user_messages, intermediate, tool_episode = process_and_split_trace_user_tool(messages)
-    
-    assert user_messages == []
-    # No user. Intermediate = messages[:tool_start] = [System]
-    assert len(intermediate) == 1
-    assert intermediate[0]["role"] == "system"
-    assert len(tool_episode) == 2
+    assert len(outputs) == 1
+    _, _, raw_output = outputs[0]
+    assert raw_output == {"_raw": "not json at all"}
