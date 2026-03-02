@@ -23,5 +23,6 @@ def truncate_messages(
     while keep_count < keep_last_n_messages and old_messages:
         tool_interaction, _ = get_last_tool_interaction(old_messages)
         return_messages += tool_interaction
+        old_messages = old_messages[:-len(tool_interaction)]  # Remove processed tool interaction from old_messages
         keep_count += 1
     return return_messages
