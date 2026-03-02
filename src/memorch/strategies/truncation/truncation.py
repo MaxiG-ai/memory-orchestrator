@@ -14,7 +14,8 @@ def truncate_messages(
     """
     user_msgs, _ = get_user_message(messages)
     user_query = user_msgs[:1]  # keep only the first user message (the task)
-    logger.error("🚨 More than 1 user message found in trace, keeping only the first as the user query.") if len(user_msgs) > 1 else None
+    if len(user_msgs) > 1:
+        logger.warning("🚨 More than 1 user message found in trace, keeping only the first as the user query.")
 
     old_messages = messages.copy()
     return_messages = user_query
