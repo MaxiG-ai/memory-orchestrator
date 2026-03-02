@@ -3,15 +3,19 @@ Generator agent for ACE strategy.
 Generates actions using the playbook as guidance.
 """
 
-import os
 import re
+from pathlib import Path
 from typing import List, Tuple
 
 from memorch.strategies.ace.playbook_utils import extract_json_from_text
 from memorch.utils.llm_helpers import extract_content
+from memorch.utils.prompt_manager import PromptManager
 from memorch.utils.logger import get_logger
 
 logger = get_logger("ACE.Generator")
+
+_PROMPT_FILE = "generator.prompt.md"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 class Generator:
@@ -19,20 +23,19 @@ class Generator:
     Generator agent that uses playbook to guide decision-making.
     """
 
-    def __init__(self, prompt_path: str|None = None):
+    def __init__(self, prompt_path: str | None = None):
         """
-        Initialize generator with prompt template.
+        Initialize generator with prompt template via PromptManager.
 
         Args:
-            prompt_path: Path to prompt file (defaults to generator.prompt.md)
+            prompt_path: Path to prompt file (defaults to generator.prompt.md
+                         bundled alongside this module).
         """
-        if prompt_path is None:
-            prompt_path = os.path.join(
-                os.path.dirname(__file__), "prompts", "generator.prompt.md"
-            )
-
-        with open(prompt_path, "r") as f:
-            self.prompt_template = f.read()
+        self._prompt_manager = PromptManager(
+            prompt_file_name=_PROMPT_FILE,
+            prompt_path=prompt_path or "",
+            caller_dir=_PROMPTS_DIR,
+        )
 
     def generate(
         self,
@@ -57,8 +60,8 @@ class Generator:
         Returns:
             (response_text, bullet_ids_used)
         """
-        # Build prompt
-        prompt = self.prompt_template.format(
+        # Build prompt via PromptManager (uses $-style Template substitution)
+        prompt = self._prompt_manager.render(
             playbook=playbook,
             reflection=reflection or "No recent reflection",
             question=question,
@@ -71,10 +74,7 @@ class Generator:
 
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
-        response = llm_client.generate_plain(
-            input_messages=messages, 
-            model=model
-            )
+        response = llm_client.generate_plain(input_messages=messages, model=model)
         response_text = extract_content(response)
 
         logger.debug(

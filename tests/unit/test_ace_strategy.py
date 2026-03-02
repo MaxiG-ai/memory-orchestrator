@@ -371,6 +371,102 @@ def test_generator_extracts_bullet_ids_from_text():
     assert bullet_ids == [2, 4, 6]
 
 
+def test_generator_renders_prompt_placeholders():
+    """
+    Verifies Generator uses PromptManager so all $-style placeholders in
+    generator.prompt.md are substituted before the LLM is called.
+
+    The rendered prompt sent to generate_plain must contain the literal
+    values passed to generate(), NOT the raw placeholder tokens such as
+    '${playbook}' or '${question}'.  This guards against regressions where
+    the Template substitution is skipped (e.g. falling back to str.format
+    with the old {}-style syntax).
+    """
+    mock_client = Mock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.content = json.dumps(
+        {
+            "reasoning_trace": "trace",
+            "response": "Call some_tool()",
+            "bullet_ids_used": [],
+        }
+    )
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.generate_plain.return_value = mock_response
+
+    generator = Generator()
+    generator.generate(
+        question="What is the capital of France?",
+        playbook="## TSD\n[1] helpful=0 harmful=0 :: decompose tasks",
+        context="Some unrelated haystack text.",
+        reflection="No issues found.",
+        llm_client=mock_client,
+    )
+
+    rendered_prompt = mock_client.generate_plain.call_args.kwargs["input_messages"][0][
+        "content"
+    ]
+
+    # Placeholders must be substituted
+    assert "${playbook}" not in rendered_prompt
+    assert "${question}" not in rendered_prompt
+    assert "${context}" not in rendered_prompt
+    assert "${reflection}" not in rendered_prompt
+
+    # Actual values must appear in the rendered prompt
+    assert "What is the capital of France?" in rendered_prompt
+    assert "decompose tasks" in rendered_prompt
+    assert "Some unrelated haystack text." in rendered_prompt
+    assert "No issues found." in rendered_prompt
+
+
+def test_generator_recommends_tool_call_when_answer_not_in_context():
+    """
+    Verifies that the generator prompt instructs the LLM to recommend a tool
+    call rather than a final answer when the context does not contain the full
+    answer.  Concretely: the rendered prompt sent to the LLM must contain the
+    'Critical Rule: Tool-First Reasoning' section so the downstream model
+    receives the correct instruction.
+
+    This is a structural test — it confirms the prompt wording survives the
+    PromptManager rendering pipeline intact.
+    """
+    mock_client = Mock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.content = json.dumps(
+        {
+            "reasoning_trace": "The answer requires a live API call.",
+            "response": "Call get_stock_price with ticker=AAPL to fetch the current price.",
+            "bullet_ids_used": [2],
+        }
+    )
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.generate_plain.return_value = mock_response
+
+    generator = Generator()
+    response_text, bullet_ids = generator.generate(
+        question="What is the current stock price of AAPL?",
+        playbook="## TLS\n[2] helpful=1 harmful=0 :: always use tools for live data",
+        context="Background: AAPL is a technology company.",  # does NOT contain the price
+        reflection="No recent reflection",
+        llm_client=mock_client,
+    )
+
+    rendered_prompt = mock_client.generate_plain.call_args.kwargs["input_messages"][0][
+        "content"
+    ]
+
+    # The tool-first instruction section must be present in the rendered prompt
+    assert "Tool-First Reasoning" in rendered_prompt
+    assert "describe the next tool call" in rendered_prompt
+
+    # The generator correctly returns whatever the LLM produced
+    assert "get_stock_price" in response_text
+    assert bullet_ids == [2]
+
+
 def test_reflector_uses_prompt():
     """Verifies Reflector uses reflector.prompt.md and calls LLM correctly."""
     mock_client = Mock()
@@ -579,9 +675,7 @@ def test_apply_ace_strategy_injects_playbook():
     state = ACEState()
     messages = [{"role": "user", "content": "Hello"}]
 
-    processed = apply_ace_strategy(
-        messages, mock_client, mock_settings, state
-    )
+    processed = apply_ace_strategy(messages, mock_client, mock_settings, state)
 
     # Should have playbook as first message
     assert processed[0]["role"] == "system"
@@ -642,9 +736,7 @@ def test_apply_ace_strategy_injects_reasoning_trace():
         {"role": "assistant", "content": "Searching for flights..."},
     ]
 
-    processed = apply_ace_strategy(
-        messages, mock_client, mock_settings, state
-    )
+    processed = apply_ace_strategy(messages, mock_client, mock_settings, state)
 
     # Verify structure: playbook + original messages + reasoning trace
     assert len(processed) == 4  # playbook + 2 original + reasoning
@@ -817,9 +909,7 @@ def test_memory_processor_apply_ace_delegates_correctly():
     messages = [{"role": "user", "content": "Test"}]
 
     # Call apply_ace_strategy directly
-    processed = apply_ace_strategy(
-        messages, mock_client, mock_settings, state
-    )
+    processed = apply_ace_strategy(messages, mock_client, mock_settings, state)
 
     # Should have injected playbook
     assert processed[0]["role"] == "system"
