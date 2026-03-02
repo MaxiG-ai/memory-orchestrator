@@ -826,3 +826,212 @@ class TestMessageParsing:
         outputs = extract_tool_outputs(messages)
 
         assert outputs == []
+
+
+# =============================================================================
+# Backfill Tests (empty-store ingestion of historical tool interactions)
+# =============================================================================
+
+
+class TestBackfill:
+    """
+    Tests for the backfill path in apply_memory_bank_strategy.
+
+    When the insight store starts empty (e.g. strategy is applied mid-session
+    with existing history), the strategy loops backwards through messages and
+    ingests every historical tool interaction before performing retrieval.
+    """
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Mock LLM client whose generate_plain returns a fixed summary."""
+        llm = Mock()
+        resp = Mock()
+        resp.choices = [Mock()]
+        resp.choices[0].message.content = "Historical summary"
+        llm.generate_plain.return_value = resp
+        return llm
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Minimal mock settings required by apply_memory_bank_strategy."""
+        s = Mock()
+        s.observer_model = "gpt-4-1-mini"
+        s.embedding_model = "BAAI/bge-small-en-v1.5"
+        s.top_k = 3
+        s.max_chars_per_record = 2000
+        return s
+
+    @pytest.fixture
+    def empty_state(self):
+        """MemoryBankState with a real‑enough mock embedding model, insight store empty."""
+        from memorch.strategies.memory_bank.memory_bank_strategy import MemoryBankState
+
+        mock_model = Mock()
+        mock_model.encode = lambda texts: np.array([[1.0, 0.0] for _ in texts])
+        state = MemoryBankState(_embedding_model=mock_model)
+        state.insight_store = InsightStore(embedding_model=mock_model)
+        return state
+
+    def _tool_round(self, call_id: str, tool_name: str, args: str, result: str):
+        """Helper: build one assistant→tool message pair."""
+        return [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": call_id, "function": {"name": tool_name, "arguments": args}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": call_id, "content": result},
+        ]
+
+    def test_backfill_ingests_all_historical_tool_interactions(
+        self, mock_llm, mock_settings, empty_state
+    ):
+        """
+        When the insight store is empty on entry and the message list contains
+        N historical tool interactions, the backfill loop iterates a copy of
+        the messages (messages_history) from last to first, calling the
+        observer LLM once per historical tool round.  The regular 'new tool
+        outputs' path then also fires once on the intact original messages (last
+        round), so total observer calls = N (backfill) + 1 (regular) = N+1.
+
+        After all ingestion the insight store must be non-empty.
+
+        This directly exercises the while-loop in apply_memory_bank_strategy.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        # Three sequential tool rounds in history
+        messages = (
+            [{"role": "user", "content": "Plan a trip to Berlin"}]
+            + self._tool_round("c1", "search_api", '{"q":"Berlin"}', '{"id":"loc1"}')
+            + self._tool_round("c2", "hotel_api", '{"loc":"loc1"}', '{"hotels":["H1"]}')
+            + self._tool_round("c3", "price_api", '{"hotel":"H1"}', '{"price":120}')
+        )
+
+        assert empty_state.insight_store.is_empty()
+
+        apply_memory_bank_strategy(
+            messages=messages,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=empty_state,
+        )
+
+        # 3 backfill calls + 1 regular-path call for the last round = 4 total
+        assert mock_llm.generate_plain.call_count == 4
+        # Insight store populated by backfill
+        assert not empty_state.insight_store.is_empty()
+
+    def test_backfill_skipped_when_store_already_populated(
+        self, mock_llm, mock_settings, empty_state
+    ):
+        """
+        When the insight store is non-empty on entry (normal mid-task step),
+        the backfill while-loop must not execute at all.  Only the latest tool
+        interaction from the current messages is ingested via the regular path.
+
+        Verifies that the `if state.insight_store.is_empty()` guard prevents
+        re-ingestion of history on every step.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        # Pre-populate the insight store so is_empty() is False
+        record = InteractionRecord.create(
+            step_id=0, tool_name="seed_api", raw_input={}, raw_output={"seed": True}
+        )
+        empty_state.fact_store.store(record)
+        empty_state.insight_store.add(record.trace_id, "Seed record")
+
+        # One tool round in the current messages
+        messages = [
+            {"role": "user", "content": "Find flights"},
+        ] + self._tool_round("c1", "flight_api", '{"dest":"Berlin"}', '{"flights":3}')
+
+        apply_memory_bank_strategy(
+            messages=messages,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=empty_state,
+        )
+
+        # Only 1 observer call for the single current tool interaction, not for history
+        assert mock_llm.generate_plain.call_count == 1
+
+    def test_backfill_passthrough_when_no_tool_interactions(
+        self, mock_llm, mock_settings, empty_state
+    ):
+        """
+        When the insight store is empty AND the messages hold no tool
+        interactions (pure user/assistant chat), the backfill loop must exit
+        immediately via the `if not last_tool_msgs: break` guard.
+
+        The function must then fall through to the passthrough branch
+        (`insight_store.is_empty()` still True) and return the original
+        messages unchanged with no observer LLM calls.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi, how can I help?"},
+        ]
+
+        processed, _ = apply_memory_bank_strategy(
+            messages=messages,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=empty_state,
+        )
+
+        # No observer calls — loop broke immediately
+        mock_llm.generate_plain.assert_not_called()
+        # Messages returned unchanged
+        assert processed == messages
+
+    def test_backfill_output_contains_retrieval_and_last_tool_round(
+        self, mock_llm, mock_settings, empty_state
+    ):
+        """
+        The backfill loop works on a copy (messages_history), so the original
+        messages list is unchanged.  The final output is therefore assembled
+        from the unmodified messages as:
+            user_query_msgs + retrieved_memory(system) + last_tool_interaction
+
+        Verifies:
+        1. User query is present in output.
+        2. A system message with retrieved context is injected.
+        3. The last tool round (assistant with tool_calls + tool response) is
+           preserved at the end of the output.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        messages = (
+            [{"role": "user", "content": "Explore Berlin"}]
+            + self._tool_round("c1", "search_api", '{"q":"Berlin"}', '{"lat":52.52}')
+            + self._tool_round("c2", "hotel_api", '{"loc":"Berlin"}', '{"hotels":[]}')
+        )
+
+        processed, _ = apply_memory_bank_strategy(
+            messages=messages,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=empty_state,
+        )
+
+        roles = [m["role"] for m in processed]
+        assert "user" in roles
+        assert "system" in roles  # Retrieved context injected
+        # Last tool round preserved at the end
+        assert roles[-1] == "tool"
+        assert roles[-2] == "assistant"
