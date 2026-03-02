@@ -110,7 +110,7 @@ def apply_ace_strategy(
             question=task,
             reasoning_trace=state.last_reasoning_trace,
             predicted_answer=state.last_predicted_answer,
-            environment_feedback="No Feedback", # Task in ComplexFuncBench run without environment feedback, so we pass a placeholder
+            environment_feedback="No Feedback",  # Task in ComplexFuncBench run without environment feedback, so we pass a placeholder
             bullets_used=bullets_used,
             llm_client=llm_client,
             model=getattr(settings, "reflector_model", "gpt-4-1"),
@@ -155,7 +155,7 @@ def apply_ace_strategy(
         updated_playbook, updated_id, operations = curator.curate(
             current_playbook=state.playbook,
             recent_reflection=state.last_reflection,
-            question_context="No additional context", # Additional context is not collected in ComplexFuncBench runs, so we pass a placeholder
+            question_context="No additional context",  # Additional context is not collected in ComplexFuncBench runs, so we pass a placeholder
             step=state.step_count,
             token_budget=getattr(settings, "playbook_token_budget", 4096),
             playbook_stats=stats,
@@ -215,12 +215,26 @@ def apply_ace_strategy(
         reasoning_trace  # Use reasoning trace as predicted answer
     )
 
+    # Strip any ACE-injected system messages from a prior step so they are not
+    # duplicated.  The output of step N is passed back as `messages` at step
+    # N+1 (by the caller), so without this guard every step would accumulate
+    # an extra ## PLAYBOOK prefix and ## ACE REASONING TRACE suffix.
+    messages = [
+        m
+        for m in messages
+        if not (
+            m.get("role") == "system"
+            and isinstance(m.get("content"), str)
+            and (
+                m["content"].startswith("## PLAYBOOK")
+                or m["content"].startswith("## ACE REASONING TRACE")
+            )
+        )
+    ]
+
     # Inject playbook into messages
     # Insert as first system message
-    playbook_message = {
-        "role": "system", 
-        "content": f"## PLAYBOOK\n\n{state.playbook}"
-        }
+    playbook_message = {"role": "system", "content": f"## PLAYBOOK\n\n{state.playbook}"}
 
     # Format reasoning trace content (reasoning + bullet IDs)
     reasoning_content = (

@@ -968,6 +968,98 @@ def test_memory_processor_reset_clears_ace_state():
     assert state.last_reflection == ""
 
 
+def test_apply_ace_strategy_strips_previous_ace_messages():
+    """
+    Verifies that apply_ace_strategy() removes ACE-injected system messages
+    from a previous step before adding new ones.
+
+    The problem: the return value of step N is passed as `messages` to step N+1.
+    That list already contains a '## PLAYBOOK' system message at index 0 and
+    a '## ACE REASONING TRACE' system message at the end (both injected in step
+    N).  Without stripping, step N+1 prepends *another* '## PLAYBOOK' message
+    and appends another '## ACE REASONING TRACE', so the output grows by 2
+    extra system messages on every step.
+
+    After the fix, the output of step N+1 must contain exactly ONE '## PLAYBOOK'
+    message (at index 0) and exactly ONE '## ACE REASONING TRACE' message (at
+    the end), regardless of how many prior steps have been run.
+    """
+    mock_client = Mock()
+    mock_settings = Mock()
+    mock_settings.reflector_model = "gpt-4-1-mini"
+    mock_settings.curator_model = "gpt-4-1-mini"
+    mock_settings.generator_model = "gpt-4-1-mini"
+    mock_settings.curator_frequency = 1
+    mock_settings.playbook_token_budget = 4096
+
+    def make_mock_response(content):
+        resp = Mock()
+        msg = Mock()
+        msg.content = json.dumps(content)
+        resp.choices = [Mock(message=msg)]
+        return resp
+
+    # Step 1: curator + generator
+    # Step 2: reflector + curator + generator
+    mock_client.generate_plain.side_effect = [
+        make_mock_response({"reasoning": "OK", "operations": []}),  # curator step 1
+        make_mock_response(
+            {
+                "reasoning_trace": "Trace 1",
+                "response": "Call tool",
+                "bullet_ids_used": [],
+            }
+        ),  # gen step 1
+        make_mock_response({"reflection": "OK", "bullet_tags": []}),  # reflector step 2
+        make_mock_response({"reasoning": "OK", "operations": []}),  # curator step 2
+        make_mock_response(
+            {
+                "reasoning_trace": "Trace 2",
+                "response": "Call tool",
+                "bullet_ids_used": [],
+            }
+        ),  # gen step 2
+    ]
+
+    state = ACEState()
+    original_messages = [
+        {"role": "user", "content": "What is 2+2?"},
+        {"role": "assistant", "content": "Let me check."},
+    ]
+
+    # Step 1 — normal
+    step1_output = apply_ace_strategy(
+        original_messages, mock_client, mock_settings, state
+    )
+
+    # Step 1 output: playbook + 2 original + reasoning = 4 messages
+    assert len(step1_output) == 4
+
+    # Step 2 — pass step 1's output back as messages (simulates real call-site)
+    step2_output = apply_ace_strategy(step1_output, mock_client, mock_settings, state)
+
+    # After stripping and re-injecting there must still be exactly 4 messages:
+    # playbook(1) + original user(1) + original assistant(1) + reasoning(1)
+    assert len(step2_output) == 4, (
+        f"Expected 4 messages after step 2, got {len(step2_output)}. "
+        "This likely means previous ACE system messages were NOT stripped."
+    )
+
+    # Exactly one PLAYBOOK message, at position 0
+    playbook_messages = [
+        m for m in step2_output if "## PLAYBOOK" in (m.get("content") or "")
+    ]
+    assert len(playbook_messages) == 1
+    assert step2_output[0] is playbook_messages[0]
+
+    # Exactly one ACE REASONING TRACE message, at the end
+    trace_messages = [
+        m for m in step2_output if "## ACE REASONING TRACE" in (m.get("content") or "")
+    ]
+    assert len(trace_messages) == 1
+    assert step2_output[-1] is trace_messages[0]
+
+
 def test_memory_processor_apply_ace_delegates_correctly():
     """Verifies apply_ace_strategy() processes messages correctly."""
     from memorch.strategies.ace.ace_strategy import apply_ace_strategy, ACEState
