@@ -22,7 +22,7 @@ from memorch.utils.token_count import get_token_count
 logger = get_logger("MemoryBankStrategy")
 
 # Fixed retrieval query per spec
-RETRIEVAL_QUERY = "how to proceed with the task"
+RETRIEVAL_QUERY = "Retrieve relevant information to answer the task: {user_query}"
 
 
 @dataclass
@@ -193,15 +193,15 @@ def apply_memory_bank_strategy(
     top_k = getattr(settings, "top_k", 3)
     max_chars = getattr(settings, "max_chars_per_record", 2000)
 
+
     retrieved = retrieve_and_format(
-        query=RETRIEVAL_QUERY,
+        query=RETRIEVAL_QUERY.format(user_query=user_query_text),
         fact_store=state.fact_store,
         insight_store=state.insight_store,
         top_k=top_k,
         max_chars=max_chars,
     )
 
-    # Construct compressed context
     user_query_msgs, _ = get_user_message(messages)
     last_tool_msgs, _ = get_last_tool_interaction(messages)
 
