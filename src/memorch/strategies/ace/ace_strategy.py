@@ -73,37 +73,35 @@ def apply_ace_strategy(
     curator_frequency = getattr(settings, "curator_frequency", 1)
 
     # Debug: Log entry state and configuration
-    logger.debug(f"\nACE Strategy - Step {state.step_count}")
-    logger.debug(f"{'=' * 60}")
-    logger.debug(
+    logger.info(f"\nACE Strategy - Step {state.step_count}")
+    logger.info(f"{'=' * 60}")
+    logger.info(
         f"State: last_reasoning_trace={'<set>' if state.last_reasoning_trace else '<empty>'}"
     )
-    logger.debug(f"State: last_bullet_ids={state.last_bullet_ids}")
-    logger.debug(
+    logger.info(f"State: last_bullet_ids={state.last_bullet_ids}")
+    logger.info(
         f"State: last_reflection={'<set>' if state.last_reflection else '<empty>'}"
     )
-    logger.debug(f"State: next_global_id={state.next_global_id}")
-    logger.debug(f"Config: curator_frequency={curator_frequency}")
-    logger.debug(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
+    logger.info(f"State: next_global_id={state.next_global_id}")
+    logger.info(f"Config: curator_frequency={curator_frequency}")
+    logger.info(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
 
     # Extract first user message, which contains the task
     task = get_first_user_text(messages)
 
-    # Run Reflector if we have previous step data
-    # Note: Only require reasoning trace - bullets may be empty on first steps (empty playbook bootstrap)
     has_reasoning = bool(state.last_reasoning_trace)
     has_bullets = bool(state.last_bullet_ids)
-    logger.debug(
+    logger.info(
         f"Reflector conditions: has_reasoning={has_reasoning}, has_bullets={has_bullets}"
     )
 
+    # require reasoning trace - bullets may be empty on first steps (empty playbook bootstrap)
     if has_reasoning:
-        logger.debug("✓ Reflector WILL run (conditions met)")
         reflector = Reflector()
 
         # Extract bullets used
         bullets_used = extract_playbook_bullets(state.playbook, state.last_bullet_ids)
-        logger.debug(
+        logger.info(
             f"Bullets extracted for reflection: {bullets_used[:200] if bullets_used else '<empty>'}..."
         )
 
@@ -147,7 +145,6 @@ def apply_ace_strategy(
     )
 
     if frequency_match:
-        logger.debug("✓ Curator WILL run (conditions met)")
         curator = Curator()
 
         # Get playbook stats
@@ -180,7 +177,7 @@ def apply_ace_strategy(
             logger.debug("⚠ No operations returned from Curator - playbook NOT updated")
     else:
         logger.debug(
-            f"✗ Curator SKIPPED (frequency_match={frequency_match}, has_reflection={has_reflection})"
+            f"🚨 Curator SKIPPED (frequency_match={frequency_match}, has_reflection={has_reflection})"
         )
 
     # Run Generator to prepare the next step
