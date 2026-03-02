@@ -128,7 +128,7 @@ class MemoryProcessor:
 
         return processed_messages, output_token_count
 
-    @weave.op(enable_code_capture=False)
+    # @weave.op(enable_code_capture=False)
     def _apply_truncation(
         self, messages: List[Dict], token_count: int
     ) -> Tuple[List[Dict], int]:
@@ -141,7 +141,7 @@ class MemoryProcessor:
         truncated_conv = truncate_messages(messages)
         return truncated_conv, get_token_count(truncated_conv)
 
-    @weave.op(enable_code_capture=False)
+    # @weave.op(enable_code_capture=False)
     def _apply_progressive_summarization(
         self,
         messages: List[Dict],
@@ -164,7 +164,7 @@ class MemoryProcessor:
         )
         return summarized_conv, get_token_count(summarized_conv)
 
-    @weave.op(enable_code_capture=False)
+    # @weave.op(enable_code_capture=False)
     def _apply_ace(
         self,
         messages: List[Dict],
@@ -179,7 +179,7 @@ class MemoryProcessor:
         processed = apply_ace_strategy(messages, llm_client, settings, self._ace_state)
         return processed, get_token_count(processed)
 
-    @weave.op(enable_code_capture=False)
+    # @weave.op(enable_code_capture=False)
     def _apply_memory_bank(
         self,
         messages: List[Dict],
