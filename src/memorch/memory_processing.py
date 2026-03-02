@@ -159,8 +159,8 @@ class MemoryProcessor:
         summarized_conv = summarize_conv_history(
             messages=messages,
             llm_client=llm_client,
-            summarizer_model=settings.summarizer_model,
             summary_prompt_path=settings.summary_prompt,
+            summarizer_model=settings.summarizer_model,
         )
         return summarized_conv, get_token_count(summarized_conv)
 

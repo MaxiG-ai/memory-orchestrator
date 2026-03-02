@@ -5,13 +5,12 @@ The progressive summarization strategy uses an LLM to compress conversation
 history into a summary, preserving essential information while reducing tokens.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from memorch.strategies.progressive_summarization.prog_sum import (
     summarize_conv_history,
-    _resolve_prompt_path,
 )
 
 
@@ -31,63 +30,36 @@ def _make_mock_llm_response(content: str) -> MagicMock:
     return response
 
 
-class TestResolvePromptPath:
-    """Tests for the _resolve_prompt_path helper function."""
+@pytest.fixture
+def prompt_file(tmp_path):
+    """Provide a minimal prompt file for PromptManager to load.
 
-    def test_resolve_default_path(self) -> None:
-        """
-        Test that default prompt path resolves correctly.
-
-        When no custom path is provided, should return the default
-        prog_sum.prompt.md in the strategy directory.
-        """
-        path = _resolve_prompt_path(None)
-
-        assert path.name == "prog_sum.prompt.md"
-        assert path.exists()
-
-    def test_resolve_custom_path_absolute(self, tmp_path) -> None:
-        """
-        Test resolution of an absolute custom path.
-
-        When a valid absolute path is provided, it should be returned.
-        """
-        custom_prompt = tmp_path / "custom.prompt.md"
-        custom_prompt.write_text("Custom prompt content")
-
-        path = _resolve_prompt_path(str(custom_prompt))
-
-        assert path == custom_prompt
-
-    def test_resolve_custom_path_relative_to_repo(self, tmp_path) -> None:
-        """
-        Test resolution of path relative to repository root.
-
-        The function should check both the direct path and relative
-        to repo root.
-        """
-        # This will fall back to default since the path doesn't exist
-        path = _resolve_prompt_path("nonexistent/path.md")
-
-        assert path.name == "prog_sum.prompt.md"
+    Creates a temporary prompt file with a ${user_query} placeholder,
+    matching the format expected by PromptManager.render().
+    """
+    p = tmp_path / "prog_sum.prompt.md"
+    p.write_text("Summarize the conversation. User query: ${user_query}")
+    return str(p)
 
 
 class TestSummarizeConvHistory:
     """Tests for the summarize_conv_history function."""
 
-    def test_summarize_requires_llm_client(self) -> None:
+    def test_summarize_requires_llm_client(self, prompt_file) -> None:
         """
         Test that function raises ValueError when llm_client is None.
 
         The progressive summarization strategy requires an LLM to generate
-        summaries, so it cannot function without a client.
+        summaries, so it cannot function without a client. The llm_client
+        check occurs before PromptManager is invoked, so a valid prompt_file
+        is provided to satisfy the required parameter.
         """
         messages = [_make_message("user", "Hello")]
 
         with pytest.raises(ValueError, match="llm_client is required"):
-            summarize_conv_history(messages, llm_client=None)
+            summarize_conv_history(messages, llm_client=None, summary_prompt_path=prompt_file)
 
-    def test_summarize_basic_conversation(self) -> None:
+    def test_summarize_basic_conversation(self, prompt_file) -> None:
         """
         Test basic summarization of a conversation.
 
@@ -106,7 +78,7 @@ class TestSummarizeConvHistory:
             "Summary: Discussed Python programming language and its features."
         )
 
-        result = summarize_conv_history(messages, llm_client=mock_client)
+        result = summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)
 
         # Should have called generate_plain
         mock_client.generate_plain.assert_called_once()
@@ -116,7 +88,7 @@ class TestSummarizeConvHistory:
         assert len(system_msgs) >= 1
         assert "Summary" in system_msgs[0]["content"]
 
-    def test_summarize_preserves_user_query(self) -> None:
+    def test_summarize_preserves_user_query(self, prompt_file) -> None:
         """
         Test that the original user query is preserved in output.
 
@@ -134,13 +106,13 @@ class TestSummarizeConvHistory:
             "Previous: Started analyzing data array."
         )
 
-        result = summarize_conv_history(messages, llm_client=mock_client)
+        result = summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)
 
         # The user query should be in the result
         user_msgs = [m for m in result if m["role"] == "user"]
         assert len(user_msgs) >= 1
 
-    def test_summarize_raises_on_empty_response(self) -> None:
+    def test_summarize_raises_on_empty_response(self, prompt_file) -> None:
         """
         Test that empty LLM response raises ValueError.
 
@@ -156,13 +128,15 @@ class TestSummarizeConvHistory:
         mock_client.generate_plain.return_value = _make_mock_llm_response("")
 
         with pytest.raises(ValueError, match="empty content"):
-            summarize_conv_history(messages, llm_client=mock_client)
+            summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)
 
-    def test_summarize_uses_custom_model(self) -> None:
+    def test_summarize_uses_custom_model(self, prompt_file) -> None:
         """
         Test that custom summarizer model is passed to LLM client.
 
         Users should be able to specify which model performs summarization.
+        The generate_plain call uses keyword arguments input_messages= and
+        model=, so both are verified via call_args.
         """
         messages = [_make_message("user", "Test")]
 
@@ -170,14 +144,14 @@ class TestSummarizeConvHistory:
         mock_client.generate_plain.return_value = _make_mock_llm_response("Summary")
 
         summarize_conv_history(
-            messages, llm_client=mock_client, summarizer_model="gpt-4o"
+            messages, llm_client=mock_client, summary_prompt_path=prompt_file, summarizer_model="gpt-4o"
         )
 
-        # Check that the model was passed to generate_plain
+        # generate_plain is called with input_messages= and model= as kwargs
         call_kwargs = mock_client.generate_plain.call_args
         assert call_kwargs.kwargs.get("model") == "gpt-4o"
 
-    def test_summarize_handles_dict_message_format(self) -> None:
+    def test_summarize_handles_dict_message_format(self, prompt_file) -> None:
         """
         Test handling of dict-style message response from LLM.
 
@@ -197,13 +171,13 @@ class TestSummarizeConvHistory:
         }
         mock_client.generate_plain.return_value = response
 
-        result = summarize_conv_history(messages, llm_client=mock_client)
+        result = summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)
 
         system_msgs = [m for m in result if m["role"] == "system"]
         assert len(system_msgs) >= 1
         assert "Dict-style summary" in system_msgs[0]["content"]
 
-    def test_summarize_with_tool_messages(self) -> None:
+    def test_summarize_with_tool_messages(self, prompt_file) -> None:
         """
         Test summarization of conversation including tool interactions.
 
@@ -226,12 +200,12 @@ class TestSummarizeConvHistory:
             "Retrieved weather: 72F temperature."
         )
 
-        result = summarize_conv_history(messages, llm_client=mock_client)
+        result = summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)
 
         # Should complete without error
         assert len(result) > 0
 
-    def test_summarize_handles_none_content_in_response(self) -> None:
+    def test_summarize_handles_none_content_in_response(self, prompt_file) -> None:
         """
         Test handling of None content in LLM response object.
 
@@ -248,4 +222,4 @@ class TestSummarizeConvHistory:
         mock_client.generate_plain.return_value = response
 
         with pytest.raises(ValueError, match="empty content"):
-            summarize_conv_history(messages, llm_client=mock_client)
+            summarize_conv_history(messages, llm_client=mock_client, summary_prompt_path=prompt_file)

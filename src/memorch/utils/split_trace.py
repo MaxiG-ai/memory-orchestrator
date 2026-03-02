@@ -97,6 +97,32 @@ def process_and_split_trace_user(messages: List[Dict]) -> Tuple[List[Dict], List
     
     return [user_messages[-1]], conv_after_user_message
 
+# Use by prog_sum
+def process_full_trace_split_user(messages: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    """Process a full trace and split into user messages and non-user messages.
+    
+    This is a simpler split that just separates out all user messages from the rest of the trace, without assuming any order.
+    
+    Args:
+        messages: List of message dictionaries
+    Returns:
+        Tuple of (user_messages, non_user_messages) where:
+        - user_messages: List of all messages with role "user"
+        - non_user_messages: List of all messages that are not from the user
+    """
+    assert messages is not None, "Messages list cannot be None"
+    
+    user_messages = []
+    non_user_messages = []
+    
+    for msg in messages:
+        if msg.get("role") == "user":
+            user_messages.append(msg)
+        else:
+            non_user_messages.append(msg)
+    
+    return user_messages, non_user_messages
+
 
 def process_and_split_trace_user_tool(messages: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """Process and split the trace into first user message, intermediate messages, and last tool episode.
