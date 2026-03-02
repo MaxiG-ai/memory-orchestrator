@@ -2,7 +2,9 @@
 Tests for the truncation memory strategy.
 
 The truncation strategy removes conversation history between the user query
-and the last tool interaction, keeping only the essential context for the LLM.
+and the last n tool interactions, keeping only the essential context for the LLM.
+The parameter keep_last_n_tool_interactions (default=1) controls how many
+tool interactions are retained.
 """
 
 import pytest
@@ -17,12 +19,28 @@ def _make_message(role: str, content: str, **extras) -> dict:
     return message
 
 
+def _make_tool_turn(assistant_content: str, tc_id: str, tool_name: str, tool_result: str) -> list:
+    """Return [assistant-with-tool_calls, tool-response] for a single tool turn."""
+    return [
+        _make_message(
+            "assistant",
+            assistant_content,
+            tool_calls=[{"id": tc_id, "type": "function", "function": {"name": tool_name}}],
+        ),
+        _make_message("tool", tool_result, tool_call_id=tc_id),
+    ]
+
+
 class TestTruncateMessages:
     """Tests for the truncate_messages function."""
 
+    # ------------------------------------------------------------------ #
+    # Default behaviour: keep_last_n_tool_interactions=1                  #
+    # ------------------------------------------------------------------ #
+
     def test_truncate_removes_intermediate_history(self) -> None:
         """
-        Test that intermediate conversation history is removed.
+        Test that intermediate conversation history is removed with default n=1.
 
         The truncation strategy should keep the first user message and the
         last tool interaction, discarding everything in between to reduce
@@ -34,14 +52,7 @@ class TestTruncateMessages:
             _make_message("assistant", "First answer - should be removed"),
             _make_message("user", "Follow-up question - should be removed"),
             _make_message("assistant", "Second answer - should be removed"),
-            _make_message(
-                "assistant",
-                "Calling tool",
-                tool_calls=[
-                    {"id": "tc-1", "type": "function", "function": {"name": "get_data"}}
-                ],
-            ),
-            _make_message("tool", '{"result": "data"}', tool_call_id="tc-1"),
+            *_make_tool_turn("Calling tool", "tc-1", "get_data", '{"result": "data"}'),
         ]
 
         result = truncate_messages(messages)
@@ -134,7 +145,7 @@ class TestTruncateMessages:
 
     def test_truncate_multiple_parallel_tool_calls(self) -> None:
         """
-        Test truncation preserves multiple parallel tool calls.
+        Test truncation preserves multiple parallel tool calls within a single turn.
 
         When an assistant makes multiple tool calls in one turn, all
         should be preserved in the truncated output.
@@ -161,8 +172,8 @@ class TestTruncateMessages:
         """
         Test that system messages are handled correctly.
 
-        System messages typically come before user messages and may or
-        may not be included depending on the split_trace implementation.
+        System messages are not user messages, so they are not preserved by
+        the strategy. Only the first user message is kept as the query.
         """
         messages = [
             _make_message("system", "You are a helpful assistant"),
@@ -195,18 +206,7 @@ class TestTruncateMessages:
             _make_message("user", "Ok proceed"),
             _make_message("assistant", "Analyzing..."),
             # Final tool interaction
-            _make_message(
-                "assistant",
-                "Running analysis",
-                tool_calls=[
-                    {
-                        "id": "tc-final",
-                        "type": "function",
-                        "function": {"name": "analyze"},
-                    }
-                ],
-            ),
-            _make_message("tool", '{"analysis": "complete"}', tool_call_id="tc-final"),
+            *_make_tool_turn("Running analysis", "tc-final", "analyze", '{"analysis": "complete"}'),
         ]
 
         result = truncate_messages(messages)
@@ -218,3 +218,113 @@ class TestTruncateMessages:
         assert "Initial task" in result[0]["content"]
         # Should preserve the final tool interaction
         assert result[-1]["role"] == "tool"
+
+    # ------------------------------------------------------------------ #
+    # keep_last_n_tool_interactions parameter                             #
+    # ------------------------------------------------------------------ #
+
+    def test_keep_zero_tool_interactions_returns_only_user_query(self) -> None:
+        """
+        Test that keep_last_n_tool_interactions=0 returns only the user query.
+
+        When n=0 the while-loop body never executes, so no tool interactions
+        are appended and the result is exclusively the first user message.
+        """
+        messages = [
+            _make_message("user", "Do something"),
+            *_make_tool_turn("Calling tool", "tc-1", "do_it", '{"ok": true}'),
+        ]
+
+        result = truncate_messages(messages, keep_last_n_tool_interactions=0)
+
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+
+    def test_keep_two_tool_interactions(self) -> None:
+        """
+        Test that keep_last_n_tool_interactions=2 retains the last two tool turns.
+
+        With two distinct tool interactions the loop runs twice, peeling off the
+        most-recent turn first, then the one before it. Both should appear in the
+        result alongside the original user query.
+        """
+        turn1 = _make_tool_turn("First tool call", "tc-1", "step_one", '{"step": 1}')
+        turn2 = _make_tool_turn("Second tool call", "tc-2", "step_two", '{"step": 2}')
+        messages = [
+            _make_message("user", "Run two steps"),
+            _make_message("assistant", "Intermediate text - should be dropped"),
+            *turn1,
+            _make_message("assistant", "Intermediate text 2 - should be dropped"),
+            *turn2,
+        ]
+
+        result = truncate_messages(messages, keep_last_n_tool_interactions=2)
+
+        # user + turn2 (most recent, appended first) + turn1 (older, appended second)
+        assert result[0]["role"] == "user"
+        tool_call_ids = [m.get("tool_call_id") for m in result if m["role"] == "tool"]
+        assert "tc-2" in tool_call_ids
+        assert "tc-1" in tool_call_ids
+        # Each turn contributes assistant+tool = 2 messages, plus the user query
+        assert len(result) == 5
+
+    def test_keep_more_interactions_than_available(self) -> None:
+        """
+        Test graceful behaviour when n exceeds the number of tool interactions.
+
+        If keep_last_n_tool_interactions=3 but only one tool interaction exists,
+        the loop terminates early once get_last_tool_interaction returns an empty
+        list (causing old_messages to become empty), without raising an exception.
+        Only the available interaction is included.
+        """
+        messages = [
+            _make_message("user", "Single step task"),
+            *_make_tool_turn("One tool call", "tc-only", "only_tool", '{"done": true}'),
+        ]
+
+        result = truncate_messages(messages, keep_last_n_tool_interactions=3)
+
+        # Should not raise; result contains user + the one available tool turn
+        assert result[0]["role"] == "user"
+        tool_call_ids = [m.get("tool_call_id") for m in result if m["role"] == "tool"]
+        assert tool_call_ids == ["tc-only"]
+
+    def test_keep_zero_with_no_tool_interactions(self) -> None:
+        """
+        Test that keep_last_n_tool_interactions=0 works when there are no tool
+        interactions at all.
+
+        Both the loop condition (n=0) and the absence of tool turns cause the
+        result to be just the user query.
+        """
+        messages = [
+            _make_message("user", "Plain question"),
+            _make_message("assistant", "Plain answer"),
+        ]
+
+        result = truncate_messages(messages, keep_last_n_tool_interactions=0)
+
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+
+    def test_multiple_user_messages_keeps_only_first(self) -> None:
+        """
+        Test that when the trace contains multiple user messages only the first
+        is used as the query.
+
+        The function logs a warning in this situation and slices user_msgs[:1],
+        so regardless of how many user turns exist the result starts with the
+        very first user message.
+        """
+        messages = [
+            _make_message("user", "Original task"),
+            _make_message("assistant", "Working on it..."),
+            _make_message("user", "Follow-up instruction - should be dropped"),
+            *_make_tool_turn("Tool call", "tc-1", "tool", '{"r": 1}'),
+        ]
+
+        result = truncate_messages(messages)
+
+        user_msgs_in_result = [m for m in result if m["role"] == "user"]
+        assert len(user_msgs_in_result) == 1
+        assert user_msgs_in_result[0]["content"] == "Original task"
