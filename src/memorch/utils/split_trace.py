@@ -1,5 +1,6 @@
 # contains utilities to split llm traces
 from typing import List, Dict, Tuple
+import json
 
 
 def get_user_message(messages: List[Dict]) -> Tuple[List[Dict], List[int]]:
@@ -160,3 +161,79 @@ def process_and_split_trace_user_tool(messages: List[Dict]) -> Tuple[List[Dict],
     intermediate_messages = messages[intermediate_start:intermediate_end]
     
     return [user_messages[0]], intermediate_messages, last_tool_episode
+
+
+def extract_tool_outputs(messages: List[Dict]) -> List[Tuple[str, Dict, Dict]]:
+    """
+    Extract tool call information from the latest tool interaction in messages.
+
+    Parses assistant messages with tool_calls and subsequent tool responses
+    to extract (tool_name, raw_input, raw_output) tuples.
+
+    Args:
+        messages: Conversation messages list
+
+    Returns:
+        List of (tool_name, raw_input, raw_output) tuples from the last
+        tool interaction. Empty list if no tool calls found.
+    """
+    if not messages:
+        return []
+
+    # Find the last assistant message with tool_calls
+    assistant_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        msg = messages[i]
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            assistant_idx = i
+            break
+
+    if assistant_idx is None:
+        return []
+
+    assistant_msg = messages[assistant_idx]
+    tool_calls = assistant_msg.get("tool_calls", [])
+
+    # Build mapping of tool_call_id -> (tool_name, raw_input)
+    call_map: Dict[str, Tuple[str, Dict]] = {}
+    for tc in tool_calls:
+        # Handle both dict and object formats
+        if isinstance(tc, dict):
+            call_id = tc.get("id", "")
+            func = tc.get("function", {})
+            tool_name = func.get("name", "unknown")
+            args_str = func.get("arguments", "{}")
+        else:
+            call_id = getattr(tc, "id", "")
+            func = getattr(tc, "function", None)
+            tool_name = getattr(func, "name", "unknown") if func else "unknown"
+            args_str = getattr(func, "arguments", "{}") if func else "{}"
+
+        # Parse arguments JSON
+        try:
+            raw_input = json.loads(args_str) if args_str else {}
+        except json.JSONDecodeError:
+            raw_input = {"_raw": args_str}
+
+        call_map[call_id] = (tool_name, raw_input)
+
+    # Collect tool responses that follow the assistant message
+    outputs = []
+    for msg in messages[assistant_idx + 1 :]:
+        if msg.get("role") != "tool":
+            break
+
+        tool_call_id = msg.get("tool_call_id", "")
+        content_str = msg.get("content", "{}")
+
+        # Parse response JSON
+        try:
+            raw_output = json.loads(content_str) if content_str else {}
+        except json.JSONDecodeError:
+            raw_output = {"_raw": content_str}
+
+        if tool_call_id in call_map:
+            tool_name, raw_input = call_map[tool_call_id]
+            outputs.append((tool_name, raw_input, raw_output))
+
+    return outputs
