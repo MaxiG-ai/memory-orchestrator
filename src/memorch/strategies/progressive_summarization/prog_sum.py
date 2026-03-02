@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, List
 
 from memorch.utils.llm_helpers import extract_content
@@ -36,7 +37,9 @@ def summarize_conv_history(
     user_query = {"role": "user", "content": user_query_text} if user_query_text else None
 
     prog_sum_prompt = PromptManager(
-        prompt_file_name="prog_sum.prompt.md", prompt_path=summary_prompt_path
+        prompt_file_name="prog_sum.prompt.md",
+        prompt_path=summary_prompt_path,
+        caller_dir=Path(__file__).parent,  # ensures the bundled prompt is found when installed
     )
     summarization_prompt = prog_sum_prompt.render(user_query=user_query)
 
