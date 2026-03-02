@@ -3,7 +3,7 @@ Curator agent for ACE strategy.
 Maintains and improves the playbook.
 """
 
-import os
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 from memorch.strategies.ace.playbook_utils import (
@@ -11,9 +11,13 @@ from memorch.strategies.ace.playbook_utils import (
     apply_curator_operations,
 )
 from memorch.utils.llm_helpers import extract_content
+from memorch.utils.prompt_manager import PromptManager
 from memorch.utils.logger import get_logger
 
 logger = get_logger("ACE.Curator")
+
+_PROMPT_FILE = "curator.prompt.md"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 class Curator:
@@ -23,18 +27,17 @@ class Curator:
 
     def __init__(self, prompt_path: str | None = None):
         """
-        Initialize curator with prompt template.
+        Initialize curator with prompt template via PromptManager.
 
         Args:
-            prompt_path: Path to curator prompt file
+            prompt_path: Path to prompt file (defaults to curator.prompt.md
+                         bundled alongside this module).
         """
-        if prompt_path is None:
-            prompt_path = os.path.join(
-                os.path.dirname(__file__), "prompts", "curator.prompt.md"
-            )
-
-        with open(prompt_path, "r") as f:
-            self.prompt_template = f.read()
+        self._prompt_manager = PromptManager(
+            prompt_file_name=_PROMPT_FILE,
+            prompt_path=prompt_path or "",
+            caller_dir=_PROMPTS_DIR,
+        )
 
     def curate(
         self,
@@ -73,7 +76,8 @@ Problematic: {playbook_stats.get("problematic", 0)}
 Unused: {playbook_stats.get("unused", 0)}
 """
 
-        prompt = self.prompt_template.format(
+        # Build prompt via PromptManager (uses $-style Template substitution)
+        prompt = self._prompt_manager.render(
             current_playbook=current_playbook,
             playbook_stats=stats_text,
             recent_reflection=recent_reflection or "No recent reflection",

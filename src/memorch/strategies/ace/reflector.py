@@ -3,14 +3,18 @@ Reflector agent for ACE strategy.
 Analyzes performance and tags playbook bullets.
 """
 
-import os
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 from memorch.strategies.ace.playbook_utils import extract_json_from_text
 from memorch.utils.llm_helpers import extract_content
+from memorch.utils.prompt_manager import PromptManager
 from memorch.utils.logger import get_logger
 
 logger = get_logger("ACE.Reflector")
+
+_PROMPT_FILE = "reflector.prompt.md"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 class Reflector:
@@ -20,18 +24,17 @@ class Reflector:
 
     def __init__(self, prompt_path: str | None = None):
         """
-        Initialize reflector with prompt template.
+        Initialize reflector with prompt template via PromptManager.
 
         Args:
-            prompt_path: Path to reflector prompt file
+            prompt_path: Path to prompt file (defaults to reflector.prompt.md
+                         bundled alongside this module).
         """
-        if prompt_path is None:
-            prompt_path = os.path.join(
-                os.path.dirname(__file__), "prompts", "reflector.prompt.md"
-            )
-
-        with open(prompt_path, "r") as f:
-            self.prompt_template = f.read()
+        self._prompt_manager = PromptManager(
+            prompt_file_name=_PROMPT_FILE,
+            prompt_path=prompt_path or "",
+            caller_dir=_PROMPTS_DIR,
+        )
 
     def reflect(
         self,
@@ -59,7 +62,8 @@ class Reflector:
             (reflection_text, bullet_tags)
             bullet_tags: List of dicts with bullet_id and tag
         """
-        prompt = self.prompt_template.format(
+        # Build prompt via PromptManager (uses $-style Template substitution)
+        prompt = self._prompt_manager.render(
             question=question,
             reasoning_trace=reasoning_trace,
             predicted_answer=predicted_answer,
@@ -73,9 +77,7 @@ class Reflector:
 
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
-        response = llm_client.generate_plain(
-            input_messages=messages, 
-            model=model)
+        response = llm_client.generate_plain(input_messages=messages, model=model)
         response_text = extract_content(response)
 
         # Extract bullet tags

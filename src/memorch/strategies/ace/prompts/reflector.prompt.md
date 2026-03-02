@@ -9,19 +9,19 @@ Analyze the agent's reasoning and outcome, then provide:
 3. Suggestions for playbook improvements
 
 ## Question
-{question}
+${question}
 
 ## Reasoning Trace
-{reasoning_trace}
+${reasoning_trace}
 
 ## Predicted Answer
-{predicted_answer}
+${predicted_answer}
 
 ## Environment Feedback
-{environment_feedback}
+${environment_feedback}
 
 ## Bullets Used
-{bullets_used}
+${bullets_used}
 
 ## Instructions
 1. Evaluate the reasoning quality and coherence
@@ -31,13 +31,13 @@ Analyze the agent's reasoning and outcome, then provide:
 
 ## Response Format
 ```json
-{{
+{
   "reflection": "Your analysis of what worked and what didn't",
   "bullet_tags": [
-    {{"bullet_id": 1, "tag": "helpful"}},
-    {{"bullet_id": 3, "tag": "harmful"}},
-    {{"bullet_id": 5, "tag": "neutral"}}
+    {"bullet_id": 1, "tag": "helpful"},
+    {"bullet_id": 3, "tag": "harmful"},
+    {"bullet_id": 5, "tag": "neutral"}
   ],
   "improvement_suggestions": "Specific recommendations for the playbook"
-}}
+}
 ```

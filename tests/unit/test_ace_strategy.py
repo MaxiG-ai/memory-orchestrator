@@ -599,6 +599,102 @@ def test_curator_handles_empty_operations():
     assert operations == []
 
 
+def test_reflector_renders_prompt_placeholders():
+    """
+    Verifies Reflector uses PromptManager so all $-style placeholders in
+    reflector.prompt.md are substituted before the LLM is called.
+
+    The rendered prompt must contain the literal values passed to reflect()
+    and must NOT contain any raw '${...}' tokens.  This guards against
+    regressions where Template substitution is skipped.
+    """
+    mock_client = Mock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.content = json.dumps({"reflection": "ok", "bullet_tags": []})
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.generate_plain.return_value = mock_response
+
+    reflector = Reflector()
+    reflector.reflect(
+        question="Is the server healthy?",
+        reasoning_trace="I checked the logs and saw no errors.",
+        predicted_answer="Yes, the server is healthy.",
+        environment_feedback="All checks passed.",
+        bullets_used="[1] helpful=2 harmful=0 :: always verify tool outputs",
+        llm_client=mock_client,
+    )
+
+    rendered_prompt = mock_client.generate_plain.call_args.kwargs["input_messages"][0][
+        "content"
+    ]
+
+    # No raw placeholder tokens should survive rendering
+    assert "${question}" not in rendered_prompt
+    assert "${reasoning_trace}" not in rendered_prompt
+    assert "${predicted_answer}" not in rendered_prompt
+    assert "${environment_feedback}" not in rendered_prompt
+    assert "${bullets_used}" not in rendered_prompt
+
+    # Actual values must appear in the rendered prompt
+    assert "Is the server healthy?" in rendered_prompt
+    assert "I checked the logs and saw no errors." in rendered_prompt
+    assert "All checks passed." in rendered_prompt
+    assert "always verify tool outputs" in rendered_prompt
+
+
+def test_curator_renders_prompt_placeholders():
+    """
+    Verifies Curator uses PromptManager so all $-style placeholders in
+    curator.prompt.md are substituted before the LLM is called.
+
+    The rendered prompt must contain the literal values passed to curate()
+    and must NOT contain any raw '${...}' tokens.  This guards against
+    regressions where Template substitution is skipped.
+    """
+    mock_client = Mock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.content = json.dumps({"reasoning": "fine", "operations": []})
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.generate_plain.return_value = mock_response
+
+    curator = Curator()
+    curator.curate(
+        current_playbook="## TSD\n[1] helpful=3 harmful=0 :: decompose tasks",
+        recent_reflection="Bullet 1 was very useful.",
+        question_context="Agentic benchmark task.",
+        step=5,
+        token_budget=2048,
+        playbook_stats={
+            "total_bullets": 1,
+            "high_performing": 1,
+            "problematic": 0,
+            "unused": 0,
+        },
+        llm_client=mock_client,
+        next_global_id=2,
+    )
+
+    rendered_prompt = mock_client.generate_plain.call_args.kwargs["input_messages"][0][
+        "content"
+    ]
+
+    # No raw placeholder tokens should survive rendering
+    assert "${current_playbook}" not in rendered_prompt
+    assert "${playbook_stats}" not in rendered_prompt
+    assert "${recent_reflection}" not in rendered_prompt
+    assert "${question_context}" not in rendered_prompt
+    assert "${step}" not in rendered_prompt
+    assert "${token_budget}" not in rendered_prompt
+
+    # Actual values must appear in the rendered prompt
+    assert "decompose tasks" in rendered_prompt
+    assert "Bullet 1 was very useful." in rendered_prompt
+    assert "Agentic benchmark task." in rendered_prompt
+    assert "2048" in rendered_prompt
+
+
 # ============================================================================
 # ACE STATE TESTS
 # ============================================================================

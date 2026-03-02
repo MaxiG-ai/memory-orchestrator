@@ -10,22 +10,22 @@ Review the current playbook and recent performance, then decide what operations 
 - NONE: No changes needed
 
 ## Current Playbook
-{current_playbook}
+${current_playbook}
 
 ## Playbook Statistics
-{playbook_stats}
+${playbook_stats}
 
 ## Recent Reflection
-{recent_reflection}
+${recent_reflection}
 
 ## Question Context
-{question_context}
+${question_context}
 
 ## Step Number
-{step}
+${step}
 
 ## Token Budget
-{token_budget}
+${token_budget}
 
 ## Instructions
 1. Identify patterns in recent reflections
@@ -42,33 +42,33 @@ Review the current playbook and recent performance, then decide what operations 
 
 ## Response Format
 ```json
-{{
+{
   "reasoning": "Why these changes are needed",
   "operations": [
-    {{
+    {
       "op": "ADD",
       "section": "task_decomposition",
       "content": "Break complex tasks into smaller subtasks before attempting",
       "priority": "high"
-    }},
-    {{
+    },
+    {
       "op": "REMOVE",
       "bullet_id": 7,
       "reason": "Consistently harmful (harmful=5, helpful=0)"
-    }},
-    {{
+    },
+    {
       "op": "UPDATE",
       "bullet_id": 3,
       "new_content": "Refined guidance based on recent learnings"
-    }}
+    }
   ]
-}}
+}
 ```
 
 If no changes needed:
 ```json
-{{
+{
   "reasoning": "Playbook is performing well",
   "operations": []
-}}
+}
 ```
