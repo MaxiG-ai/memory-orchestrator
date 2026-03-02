@@ -189,7 +189,7 @@ def apply_ace_strategy(
     # Extract context from messages (handle None content values)
     context = "\n".join(
         [
-            f"{msg.get('role', 'unknown')}: {(msg.get('content') or '')[:200]}..."
+            f"{msg.get('role', 'unknown')}: {(msg.get('content') or '')}"
             for msg in messages[-3:]  # Last 3 messages for context
         ]
     )
