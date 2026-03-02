@@ -32,7 +32,9 @@ def summarize_conv_history(
         raise ValueError("llm_client is required for progressive summarization")
 
     # TODO: This should be changed to not depend on the order of messages
-    user_query, _ = process_full_trace_split_user(messages)
+    user_query_list, _ = process_full_trace_split_user(messages)
+    assert len(user_query_list) <= 1, "Expected at most one user message for summarization"
+    user_query = user_query_list[0] if user_query_list else None
 
     prog_sum_prompt = PromptManager(
         prompt_file_name="prog_sum.prompt.md", prompt_path=summary_prompt_path
