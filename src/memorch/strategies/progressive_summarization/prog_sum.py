@@ -1,32 +1,19 @@
-from typing import Dict, List, Optional
-from pathlib import Path
+from typing import Dict, List
 
 from memorch.utils.llm_helpers import extract_content
+from memorch.utils.prompt_manager import PromptManager
 from memorch.utils.logger import get_logger
 from memorch.utils.split_trace import process_and_split_trace_user
 
 logger = get_logger("ProgressiveSummarization")
 
 
-def _resolve_prompt_path(prompt_path: Optional[str]) -> Path:
-    """Resolve path to the summarization prompt file.
-
-    Falls back to the default prog_sum.prompt.md co-located with this module,
-    which works correctly both in src-layout dev checkouts and when installed
-    as a library.
-    """
-    if prompt_path:
-        candidate = Path(prompt_path)
-        if candidate.is_file():
-            return candidate
-    return Path(__file__).parent / "prog_sum.prompt.md"
-
 
 def summarize_conv_history(
     messages: List[Dict],
     llm_client,
+    summary_prompt_path: str,
     summarizer_model: str = "gpt-4-1",
-    summary_prompt_path: Optional[str] = None,
 ) -> List[Dict]:
     """
     Splitting a message trace into user query and conversation history, then summarizing the conversation history using an LLM,
@@ -45,12 +32,12 @@ def summarize_conv_history(
     if llm_client is None:
         raise ValueError("llm_client is required for progressive summarization")
 
+    # TODO: This should be changed to not depend on the order of messages
     user_query, conversation_history = process_and_split_trace_user(messages)
 
-    prompt_file = _resolve_prompt_path(summary_prompt_path)
-    summarization_prompt = prompt_file.read_text(encoding="utf-8")
-
-    # Build prompt for summarization
+    prog_sum_prompt = PromptManager(prompt_file_name="prog_sum.prompt.md", prompt_path=summary_prompt_path)
+    summarization_prompt = prog_sum_prompt.render(user_query=user_query)
+    
     prompt_messages = [
         {"role": "system", "content": summarization_prompt},
         {
