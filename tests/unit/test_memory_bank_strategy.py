@@ -753,7 +753,7 @@ class TestMessageParsing:
         extract_tool_outputs() should parse assistant tool_calls and
         subsequent tool responses into (name, input, output) tuples.
         """
-        from memorch.strategies.memory_bank.ingestion import extract_tool_outputs
+        from memorch.utils.split_trace import extract_tool_outputs
 
         messages = [
             {"role": "user", "content": "Find hotels"},
@@ -789,7 +789,7 @@ class TestMessageParsing:
         extract_tool_outputs() should handle multiple parallel tool calls
         in a single assistant message.
         """
-        from memorch.strategies.memory_bank.ingestion import extract_tool_outputs
+        from memorch.utils.split_trace import extract_tool_outputs
 
         messages = [
             {"role": "user", "content": "Task"},
@@ -816,7 +816,7 @@ class TestMessageParsing:
         extract_tool_outputs() should return empty list if no tool
         interactions in messages.
         """
-        from memorch.strategies.memory_bank.ingestion import extract_tool_outputs
+        from memorch.utils.split_trace import extract_tool_outputs
 
         messages = [
             {"role": "user", "content": "Hello"},

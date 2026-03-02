@@ -57,12 +57,12 @@ def summarize_conv_history(
     if not summary_text:
         raise ValueError("Summarization returned empty content")
 
-    # Build final message list: [summary, user query]
+    # Build final message list: [user query, summary]
     summary_message = {"role": "system", "content": summary_text}
 
     result = []
     if user_query:
-        result.extend(user_query)
-    result.extend([summary_message])
+        result.append(user_query)  # append the dict, not extend over its keys
+    result.append(summary_message)
 
     return result
