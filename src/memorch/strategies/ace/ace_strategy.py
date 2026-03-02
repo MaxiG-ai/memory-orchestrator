@@ -16,6 +16,7 @@ from memorch.strategies.ace.generator import Generator
 from memorch.strategies.ace.reflector import Reflector
 from memorch.strategies.ace.curator import Curator
 from memorch.utils.logger import get_logger
+from memorch.utils.split_trace import get_first_user_text
 
 logger = get_logger("ACEStrategy")
 
@@ -86,11 +87,7 @@ def apply_ace_strategy(
     logger.debug(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
 
     # Extract first user message, which contains the task
-    task = ""
-    for msg in messages:
-        if msg.get("role") == "user":
-            task = msg.get("content", "")
-            break
+    task = get_first_user_text(messages)
 
     # Run Reflector if we have previous step data
     # Note: Only require reasoning trace - bullets may be empty on first steps (empty playbook bootstrap)

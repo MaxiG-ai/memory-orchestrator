@@ -3,7 +3,7 @@ from typing import Dict, List
 from memorch.utils.llm_helpers import extract_content
 from memorch.utils.prompt_manager import PromptManager
 from memorch.utils.logger import get_logger
-from memorch.utils.split_trace import process_full_trace_split_user
+from memorch.utils.split_trace import get_first_user_text
 
 logger = get_logger("ProgressiveSummarization")
 
@@ -32,9 +32,8 @@ def summarize_conv_history(
         raise ValueError("llm_client is required for progressive summarization")
 
     # TODO: This should be changed to not depend on the order of messages
-    user_query_list, _ = process_full_trace_split_user(messages)
-    assert len(user_query_list) <= 1, "Expected at most one user message for summarization"
-    user_query = user_query_list[0] if user_query_list else None
+    user_query_text = get_first_user_text(messages)
+    user_query = {"role": "user", "content": user_query_text} if user_query_text else None
 
     prog_sum_prompt = PromptManager(
         prompt_file_name="prog_sum.prompt.md", prompt_path=summary_prompt_path
@@ -58,12 +57,12 @@ def summarize_conv_history(
     if not summary_text:
         raise ValueError("Summarization returned empty content")
 
-    # Build final message list: [summary, user query]
+    # Build final message list: [user query, summary]
     summary_message = {"role": "system", "content": summary_text}
 
     result = []
     if user_query:
-        result.extend(user_query)
-    result.extend([summary_message])
+        result.append(user_query)  # append the dict, not extend over its keys
+    result.append(summary_message)
 
     return result

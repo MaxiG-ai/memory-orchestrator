@@ -1,12 +1,3 @@
-"""
-Memory Bank Strategy - Main orchestration for vector-based retrieval.
-
-Implements automatic retrieval-augmented context compression:
-1. Ingest new tool outputs after each LLM response
-2. Retrieve top-K relevant past interactions
-3. Construct context: user_query + retrieved_memory + last_tool_interaction
-"""
-
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,23 +5,25 @@ from FlagEmbedding import FlagModel
 
 from memorch.strategies.memory_bank.fact_store import FactStore
 from memorch.strategies.memory_bank.insight_store import InsightStore
-from memorch.strategies.memory_bank.ingestion import (
-    extract_tool_outputs,
-    ingest_tool_outputs,
-)
+from memorch.strategies.memory_bank.ingestion import ingest_tool_outputs
 from memorch.strategies.memory_bank.retrieval import (
     format_retrieved_memory_message,
     retrieve_and_format,
 )
+from memorch.utils.split_trace import (
+    get_user_message,
+    get_first_user_text,
+    get_last_tool_interaction,
+    extract_tool_outputs,
+)
 from memorch.utils import model_load_lock
 from memorch.utils.logger import get_logger
 from memorch.utils.token_count import get_token_count
-from memorch.utils.split_trace import get_user_message, get_last_tool_interaction
 
 logger = get_logger("MemoryBankStrategy")
 
 # Fixed retrieval query per spec
-RETRIEVAL_QUERY = "how to proceed with the task"
+RETRIEVAL_QUERY = "Retrieve relevant information to answer the task: {user_query}"
 
 
 @dataclass
@@ -58,7 +51,7 @@ class MemoryBankState:
 
     @classmethod
     def create_with_model(
-        cls, embedding_model_name: str = "BAAI/bge-small-en-v1.5"
+        cls, embedding_model_name: str = "BAAI/bge-large-en-v1.5"
     ) -> "MemoryBankState":
         """
         Factory method that initializes with a real FlagModel.
@@ -81,7 +74,7 @@ class MemoryBankState:
         return state
 
     def initialize_model(
-        self, embedding_model_name: str = "BAAI/bge-small-en-v1.5"
+        self, embedding_model_name: str = "BAAI/bge-large-en-v1.5"
     ) -> None:
         """
         Initialize embedding model if not already done.
@@ -105,13 +98,6 @@ class MemoryBankState:
         self.step_count = 0
         logger.debug("MemoryBankState reset")
 
-
-def _get_user_query_text(messages: List[Dict]) -> str:
-    """Extract user query text from messages."""
-    user_msgs, _ = get_user_message(messages)
-    if user_msgs:
-        return user_msgs[0].get("content", "")
-    return ""
 
 
 def apply_memory_bank_strategy(
@@ -142,15 +128,41 @@ def apply_memory_bank_strategy(
 
     # Ensure model is initialized (eager init per user preference)
     embedding_model_name = getattr(
-        settings, "embedding_model", "BAAI/bge-small-en-v1.5"
+        settings, "embedding_model", "BAAI/bge-large-en-v1.5"
     )
     if not state.insight_store:
         state.initialize_model(embedding_model_name)
+    assert state.insight_store is not None, (
+        "Insight store must be initialized at this point"
+    )
 
     logger.debug(f"Memory Bank Strategy - Step {state.step_count}")
 
     # Extract user query for Observer context
-    user_query_text = _get_user_query_text(messages)
+    user_query_text = get_first_user_text(messages)
+
+    # In case the insight store is empty, we should ingest all existing tool outputs in messages
+    messages_history = messages.copy()  # Create a copy to avoid modifying original messages
+    if state.insight_store.is_empty():
+        logger.debug("Insight store empty, ingesting all tool outputs from history")
+        # Recursively add the last tool interaction to insight store, delete from messages_history until no more tool interactions left
+        while len(messages_history) > 0:
+            last_tool_msgs, idx = get_last_tool_interaction(messages_history)
+            if not last_tool_msgs:
+                break
+            tool_outputs = extract_tool_outputs(last_tool_msgs)
+            if tool_outputs:
+                observer_model = getattr(settings, "observer_model", "gpt-4-1")
+                ingest_tool_outputs(
+                    tool_outputs=tool_outputs,
+                    user_query=user_query_text,
+                    fact_store=state.fact_store,
+                    insight_store=state.insight_store,
+                    llm_client=llm_client,
+                    observer_model=observer_model,
+                    step_id=state.step_count,
+                )
+            messages_history = messages_history[:idx]  # Remove the last tool interaction from messages_history
 
     # Extract and ingest new tool outputs
     tool_outputs = extract_tool_outputs(messages)
@@ -176,15 +188,15 @@ def apply_memory_bank_strategy(
     top_k = getattr(settings, "top_k", 3)
     max_chars = getattr(settings, "max_chars_per_record", 2000)
 
+
     retrieved = retrieve_and_format(
-        query=RETRIEVAL_QUERY,
+        query=RETRIEVAL_QUERY.format(user_query=user_query_text),
         fact_store=state.fact_store,
         insight_store=state.insight_store,
         top_k=top_k,
         max_chars=max_chars,
     )
 
-    # Construct compressed context
     user_query_msgs, _ = get_user_message(messages)
     last_tool_msgs, _ = get_last_tool_interaction(messages)
 
