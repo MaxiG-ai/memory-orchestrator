@@ -141,12 +141,13 @@ def apply_memory_bank_strategy(
     # Extract user query for Observer context
     user_query_text = get_first_user_text(messages)
 
-    # In case the insight store is empty, we should ingest all exisiting tool outputs in messages
+    # In case the insight store is empty, we should ingest all existing tool outputs in messages
+    messages_history = messages.copy()  # Create a copy to avoid modifying original messages
     if state.insight_store.is_empty():
         logger.debug("Insight store empty, ingesting all tool outputs from history")
-        # Recursively add the last tool interaction to insight store, delete from messages until no more tool interactions left
-        while len(messages) > 0:
-            last_tool_msgs, idx = get_last_tool_interaction(messages)
+        # Recursively add the last tool interaction to insight store, delete from messages_history until no more tool interactions left
+        while len(messages_history) > 0:
+            last_tool_msgs, idx = get_last_tool_interaction(messages_history)
             if not last_tool_msgs:
                 break
             tool_outputs = extract_tool_outputs(last_tool_msgs)
@@ -161,7 +162,7 @@ def apply_memory_bank_strategy(
                     observer_model=observer_model,
                     step_id=state.step_count,
                 )
-            messages = messages[:idx]  # Remove the last tool interaction from messages
+            messages_history = messages_history[:idx]  # Remove the last tool interaction from messages_history
 
     # Extract and ingest new tool outputs
     tool_outputs = extract_tool_outputs(messages)

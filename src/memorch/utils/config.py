@@ -24,7 +24,7 @@ class MemoryDef(BaseModel):
     auto_compact_threshold: Optional[int] = None
 
     # Memory Bank strategy fields
-    embedding_model: Optional[str] = "BAAI/bge-small-en-v1.5"
+    embedding_model: Optional[str] = "BAAI/bge-large-en-v1.5"
     top_k: Optional[int] = 3
     observer_model: Optional[str] = "gpt-4-1-mini"
     max_chars_per_record: Optional[int] = 2000
