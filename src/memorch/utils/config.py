@@ -30,7 +30,7 @@ class MemoryDef(BaseModel):
     max_chars_per_record: Optional[int] = 2000
 
     # Fields for Progressive Summarization
-    summary_prompt: Optional[str] = None
+    summary_prompt: str = "memorch/strategies/progressive_summarization/prog_sum.prompt.md"
     summarizer_model: Optional[str] = None
 
     # ACE strategy fields
