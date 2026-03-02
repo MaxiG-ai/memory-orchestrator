@@ -1,23 +1,26 @@
 from typing import List, Dict
 from memorch.utils.logger import get_logger
 from memorch.utils.split_trace import get_user_message, get_last_tool_interaction
-from memorch.utils.token_count import get_token_count
 
 logger = get_logger("TruncationStrategy")
 
 def truncate_messages(
     messages: List[Dict],
+    keep_last_n_messages: int = 1,
 ) -> List[Dict]:
     """ Truncation strategy that splits messages into user query, conversation history, and tool interaction.
-        Keeps the last user query and the last tool interaction intact,
+        Keeps the last user query and the last n tool interaction intact,
         truncating the conversation history in between as needed.
     """
-
     user_msgs, _ = get_user_message(messages)
     user_query = user_msgs[:1]  # keep only the first user message (the task)
-    tool_interaction, _ = get_last_tool_interaction(messages)
-    logger.debug(f"""🧠 Truncation Strategy: 
-                User Query Tokens: {get_token_count(user_query)},
-                Tool Interaction Tokens: {get_token_count(tool_interaction)}"""
-                 )
-    return user_query + tool_interaction
+    logger.error("🚨 More than 1 user message found in trace, keeping only the first as the user query.") if len(user_msgs) > 1 else None
+
+    old_messages = messages.copy()
+    return_messages = user_query
+    keep_count = 0
+    while keep_count < keep_last_n_messages and old_messages:
+        tool_interaction, _ = get_last_tool_interaction(old_messages)
+        return_messages += tool_interaction
+        keep_count += 1
+    return return_messages
