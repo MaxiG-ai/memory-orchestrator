@@ -67,6 +67,7 @@ class MemoryProcessor:
                 f"Infinite loop detected in last {len(messages)} messages."
             )
 
+        #########################################
         ### MEMORY STRATEGY APPLICATION LOGIC ###
         #########################################
 
@@ -96,8 +97,6 @@ class MemoryProcessor:
             return messages, input_token_count
 
         ## STRATEGIES APPLIED BASED ON TOKEN COUNT ##
-        # Caller must supply the threshold; it is one value from config.compact_thresholds,
-        # iterated externally so each threshold value produces a distinct experiment run.
         if compact_threshold is None:
             raise ValueError(
                 f"compact_threshold must be provided for threshold-sensitive strategy '{settings.type}'"
