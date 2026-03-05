@@ -56,7 +56,7 @@ def set_global_log_level(level: str):
     log_level = getattr(logging, level.upper(), logging.INFO)
     
     # Update all existing loggers
-    for name in logging.root.manager.loggerDict:
+    for name in list(logging.root.manager.loggerDict):
         if isinstance(logging.root.manager.loggerDict[name], logging.Logger):
             logger = logging.getLogger(name)
             logger.setLevel(log_level)

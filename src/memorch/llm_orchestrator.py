@@ -65,16 +65,20 @@ class LLMOrchestrator:
         )
     """
 
-    def __init__(self, exp_path="config.toml", model_path="model_config.toml"):
+    def __init__(self, exp_path="config.toml", model_path="model_config.toml", config: Optional[ExperimentConfig] = None):
         """
         Initialize orchestrator with configuration.
 
         Args:
             exp_path: Path to experiment config file
             model_path: Path to model registry config file
+            config: Optional pre-loaded experiment config
         """
         # Load static config
-        self.cfg: ExperimentConfig = load_configs(exp_path, model_path)
+        if config is not None:
+            self.cfg: ExperimentConfig = config
+        else:
+            self.cfg: ExperimentConfig = load_configs(exp_path, model_path)
 
         # Initialize memory processor
         self.memory_processor = MemoryProcessor(self.cfg)
