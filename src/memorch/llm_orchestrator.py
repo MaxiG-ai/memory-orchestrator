@@ -1,7 +1,5 @@
 import copy
 import litellm
-import weave
-import os
 import time
 
 from dataclasses import dataclass, field
@@ -46,7 +44,6 @@ class LLMOrchestrator:
     Integrates:
     - LiteLLM for model interactions
     - Memory processing for context optimization
-    - Comprehensive tracking with weave/wandb
 
     Usage:
         # Initialize
@@ -99,21 +96,7 @@ class LLMOrchestrator:
         # turns build on the already-compressed state rather than the raw growing history.
         self.last_compressed_view: Optional[List[Dict]] = None
 
-        # Configure LiteLLM
-        if self.cfg.weave_deep_logging:
-            os.environ["LITELLM_LOG"] = "DEBUG"
-            litellm.suppress_debug_info = False
-            litellm.success_callback = ["weave", "console"]
-
         logger.info(f"🚀 Orchestrator initialized for: {self.cfg.experiment_name}")
-
-    def get_exp_config(self) -> Dict[str, Any]:
-        """
-        Return only experiment configs (no model registry). Used for logging with weave.
-        """
-        exp_dict = self.cfg.model_dump()
-        exp_dict.pop("model_registry", None)
-        return exp_dict
 
     def reset_session(self):
         """
@@ -215,7 +198,6 @@ class LLMOrchestrator:
 
         return model_kwargs
 
-    @weave.op(enable_code_capture=False)
     def generate_with_memory_applied(
         self,
         input_messages: List[Dict[str, str]],

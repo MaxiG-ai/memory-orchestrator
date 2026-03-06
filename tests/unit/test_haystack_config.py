@@ -16,7 +16,6 @@ def _base_config(**overrides) -> dict:
         "results_dir": "results",
         "log_dir": "logs",
         "logging_level": "WARNING",
-        "weave_logging": False,
         "input_file": "data.jsonl",
         "enabled_models": ["gpt-test"],
         "enabled_memory_methods": ["no_strategy"],

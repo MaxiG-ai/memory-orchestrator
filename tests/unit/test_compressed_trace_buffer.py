@@ -28,7 +28,6 @@ def mock_orchestrator():
         mock_cfg = MagicMock()
         mock_cfg.enabled_models = ["test-model"]
         mock_cfg.enabled_memory_methods = ["no_strategy"]
-        mock_cfg.weave_deep_logging = False
         mock_cfg.memory_strategies = {"no_strategy": MagicMock()}
         mock_cfg.model_registry = {
             "test-model": MagicMock(
