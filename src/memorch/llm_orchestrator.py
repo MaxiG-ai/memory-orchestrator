@@ -62,14 +62,26 @@ class LLMOrchestrator:
         )
     """
 
-    def __init__(self, exp_path="config.toml", model_path="model_config.toml", config: Optional[ExperimentConfig] = None):
+    def __init__(self, exp_path="config.toml", model_path: Optional[str] = None, config: Optional[ExperimentConfig] = None):
         """
         Initialize orchestrator with configuration.
 
+        Model definitions can be supplied in three ways:
+
+        1. **Separate model registry file** – pass ``model_path`` pointing to a
+           TOML file (e.g. ``model_config.toml``) in the execution repository.
+           Its ``[models]`` table is merged into the experiment config.
+        2. **Embedded in experiment config** – add a ``[models]`` table directly
+           inside the ``exp_path`` TOML file.
+        3. **Pre-built config object** – construct an :class:`ExperimentConfig`
+           with a populated ``model_registry`` and pass it via ``config=``.
+
         Args:
-            exp_path: Path to experiment config file
-            model_path: Path to model registry config file
-            config: Optional pre-loaded experiment config
+            exp_path: Path to the experiment config TOML file (default: ``config.toml``).
+            model_path: Optional path to a separate model-registry TOML file.
+                Defaults to ``None`` (no separate file loaded).
+            config: Optional pre-built :class:`ExperimentConfig`. When supplied,
+                ``exp_path`` and ``model_path`` are ignored.
         """
         # Load static config
         if config is not None:
