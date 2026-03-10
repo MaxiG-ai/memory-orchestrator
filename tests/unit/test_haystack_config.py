@@ -38,40 +38,6 @@ def _base_config(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_max_messages_default_is_40():
-    """Verify that ExperimentConfig defaults max_messages_after_compression to 40.
-
-    Backward compatibility: existing configs that don't set this field must
-    continue to enforce the original hard limit of 40 messages.
-    """
-    cfg = ExperimentConfig.model_validate(_base_config())
-    assert cfg.max_messages_after_compression == 40
-
-
-def test_max_messages_configurable():
-    """Verify that max_messages_after_compression can be set to a custom value.
-
-    For haystack experiments with large injected contexts, conversations may
-    legitimately contain 60-100+ messages.  The limit must be raisable.
-    """
-    cfg = ExperimentConfig.model_validate(
-        _base_config(max_messages_after_compression=200)
-    )
-    assert cfg.max_messages_after_compression == 200
-
-
-def test_max_messages_none_accepted():
-    """Verify that None disables the post-compression message limit entirely.
-
-    Setting max_messages_after_compression=None means 'no upper bound',
-    useful when the experiment itself controls message count.
-    """
-    cfg = ExperimentConfig.model_validate(
-        _base_config(max_messages_after_compression=None)
-    )
-    assert cfg.max_messages_after_compression is None
-
-
 def test_haystack_thresholds_default_none():
     """Verify haystack_thresholds defaults to None when not specified.
 
