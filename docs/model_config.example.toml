@@ -1,0 +1,27 @@
+# --- Model Registry ---
+# Static definitions of available models 
+
+# Models set up using AI-Core (SAP's GenAI platform) through litellm 
+# see https://docs.litellm.ai/docs/providers/sap#step-2-set-your-credentials for setup instructions
+
+[models.gpt-4-1-mini]
+litellm_name = "sap/gpt-4.1-mini"
+context_window = 128000
+temperature = 0
+provider = "aicore"
+
+[models.claude-sonnet-4-6]
+litellm_name = "sap/anthropic--claude-4.6-sonnet_automatisch erstellt"
+context_window = 200000
+temperature = 0
+provider = "aicore"
+
+# models on GPU-Cluster running vLLM
+
+[models.glm-4-7]
+litellm_name = "openai/zai-org/GLM-4.7"
+context_window = 200000
+temperature = 0
+provider = "ollama"
+api_base = "http://10.237.166.249:8000/v1"
+api_key = "THINKTANK"
