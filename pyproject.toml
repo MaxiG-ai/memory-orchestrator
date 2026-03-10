@@ -25,5 +25,4 @@ dependencies = [
 packages = ["src/memorch"]
 
 [tool.uv.sources]
-# provides fix for transformers v5 issue.
-flagembedding = { git = "https://github.com/FlagOpen/FlagEmbedding.git", rev = "master" }
+flagembedding = { git = "https://github.com/FlagOpen/FlagEmbedding.git", rev = "dbc6005" }
