@@ -9,7 +9,7 @@ def truncate_messages(
     keep_last_n_tool_interactions: int = 1,
 ) -> List[Dict]:
     """ Truncation strategy that splits messages into user query, conversation history, and tool interaction.
-        Keeps the last user query and the last n tool interaction intact,
+        Keeps the first user query and the last n tool interaction intact,
         truncating the conversation history in between as needed.
     """
     user_msgs, _ = get_user_message(messages)

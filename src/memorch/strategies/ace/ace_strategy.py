@@ -73,25 +73,25 @@ def apply_ace_strategy(
     curator_frequency = getattr(settings, "curator_frequency", 1)
 
     # Debug: Log entry state and configuration
-    logger.info(f"\nACE Strategy - Step {state.step_count}")
-    logger.info(f"{'=' * 60}")
-    logger.info(
+    logger.debug(f"\nACE Strategy - Step {state.step_count}")
+    logger.debug(f"{'=' * 60}")
+    logger.debug(
         f"State: last_reasoning_trace={'<set>' if state.last_reasoning_trace else '<empty>'}"
     )
-    logger.info(f"State: last_bullet_ids={state.last_bullet_ids}")
-    logger.info(
+    logger.debug(f"State: last_bullet_ids={state.last_bullet_ids}")
+    logger.debug(
         f"State: last_reflection={'<set>' if state.last_reflection else '<empty>'}"
     )
-    logger.info(f"State: next_global_id={state.next_global_id}")
-    logger.info(f"Config: curator_frequency={curator_frequency}")
-    logger.info(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
+    logger.debug(f"State: next_global_id={state.next_global_id}")
+    logger.debug(f"Config: curator_frequency={curator_frequency}")
+    logger.debug(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
 
     # Extract first user message, which contains the task
     task = get_first_user_text(messages)
 
     has_reasoning = bool(state.last_reasoning_trace)
     has_bullets = bool(state.last_bullet_ids)
-    logger.info(
+    logger.debug(
         f"Reflector conditions: has_reasoning={has_reasoning}, has_bullets={has_bullets}"
     )
 
@@ -101,7 +101,7 @@ def apply_ace_strategy(
 
         # Extract bullets used
         bullets_used = extract_playbook_bullets(state.playbook, state.last_bullet_ids)
-        logger.info(
+        logger.debug(
             f"Bullets extracted for reflection: {bullets_used[:200] if bullets_used else '<empty>'}..."
         )
 

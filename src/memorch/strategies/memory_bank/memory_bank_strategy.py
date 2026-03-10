@@ -164,20 +164,24 @@ def apply_memory_bank_strategy(
                 )
             messages_history = messages_history[:idx]  # Remove the last tool interaction from messages_history
 
-    # Extract and ingest new tool outputs
-    tool_outputs = extract_tool_outputs(messages)
-    if tool_outputs:
-        observer_model = getattr(settings, "observer_model", "gpt-4-1")
-        trace_ids = ingest_tool_outputs(
-            tool_outputs=tool_outputs,
-            user_query=user_query_text,
-            fact_store=state.fact_store,
-            insight_store=state.insight_store,
-            llm_client=llm_client,
-            observer_model=observer_model,
-            step_id=state.step_count,
-        )
-        logger.debug(f"Ingested {len(trace_ids)} tool outputs")
+    # Should always run, once insight store is initialized
+    else:
+        logger.debug("Insight store already has data, skipping history ingestion")
+
+        # Extract and ingest new tool outputs
+        tool_outputs = extract_tool_outputs(messages)
+        if tool_outputs:
+            observer_model = getattr(settings, "observer_model", "gpt-4-1")
+            trace_ids = ingest_tool_outputs(
+                tool_outputs=tool_outputs,
+                user_query=user_query_text,
+                fact_store=state.fact_store,
+                insight_store=state.insight_store,
+                llm_client=llm_client,
+                observer_model=observer_model,
+                step_id=state.step_count,
+            )
+            logger.debug(f"Ingested {len(trace_ids)} tool outputs")
 
     # First step or no history → pass through unchanged
     if state.insight_store.is_empty():
