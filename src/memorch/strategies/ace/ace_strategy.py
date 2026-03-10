@@ -16,6 +16,7 @@ from memorch.strategies.ace.generator import Generator
 from memorch.strategies.ace.reflector import Reflector
 from memorch.strategies.ace.curator import Curator
 from memorch.utils.logger import get_logger
+from memorch.utils.split_trace import get_first_user_text
 
 logger = get_logger("ACEStrategy")
 
@@ -86,22 +87,16 @@ def apply_ace_strategy(
     logger.debug(f"Playbook preview (first 200 chars): {state.playbook[:200]}...")
 
     # Extract first user message, which contains the task
-    task = ""
-    for msg in messages:
-        if msg.get("role") == "user":
-            task = msg.get("content", "")
-            break
+    task = get_first_user_text(messages)
 
-    # Run Reflector if we have previous step data
-    # Note: Only require reasoning trace - bullets may be empty on first steps (empty playbook bootstrap)
     has_reasoning = bool(state.last_reasoning_trace)
     has_bullets = bool(state.last_bullet_ids)
     logger.debug(
         f"Reflector conditions: has_reasoning={has_reasoning}, has_bullets={has_bullets}"
     )
 
+    # require reasoning trace - bullets may be empty on first steps (empty playbook bootstrap)
     if has_reasoning:
-        logger.debug("✓ Reflector WILL run (conditions met)")
         reflector = Reflector()
 
         # Extract bullets used
@@ -150,7 +145,6 @@ def apply_ace_strategy(
     )
 
     if frequency_match:
-        logger.debug("✓ Curator WILL run (conditions met)")
         curator = Curator()
 
         # Get playbook stats
@@ -183,7 +177,7 @@ def apply_ace_strategy(
             logger.debug("⚠ No operations returned from Curator - playbook NOT updated")
     else:
         logger.debug(
-            f"✗ Curator SKIPPED (frequency_match={frequency_match}, has_reflection={has_reflection})"
+            f"🚨 Curator SKIPPED (frequency_match={frequency_match}, has_reflection={has_reflection})"
         )
 
     # Run Generator to prepare the next step

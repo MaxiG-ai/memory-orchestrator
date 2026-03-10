@@ -24,7 +24,7 @@ class MemoryDef(BaseModel):
     auto_compact_threshold: Optional[int] = None
 
     # Memory Bank strategy fields
-    embedding_model: Optional[str] = "BAAI/bge-small-en-v1.5"
+    embedding_model: Optional[str] = "BAAI/bge-large-en-v1.5"
     top_k: Optional[int] = 3
     observer_model: Optional[str] = "gpt-4-1-mini"
     max_chars_per_record: Optional[int] = 2000
@@ -46,7 +46,6 @@ class ExperimentConfig(BaseModel):
     results_dir: str
     log_dir: str
     logging_level: str
-    weave_deep_logging: bool = Field(default=False, alias="weave_logging")
     input_file: str
     proc_num: int = 1
     benchmark_sample_size: Optional[int] = None

@@ -579,7 +579,7 @@ def test_apply_ace_strategy_injects_playbook():
     state = ACEState()
     messages = [{"role": "user", "content": "Hello"}]
 
-    processed, token_count = apply_ace_strategy(
+    processed = apply_ace_strategy(
         messages, mock_client, mock_settings, state
     )
 
@@ -642,7 +642,7 @@ def test_apply_ace_strategy_injects_reasoning_trace():
         {"role": "assistant", "content": "Searching for flights..."},
     ]
 
-    processed, token_count = apply_ace_strategy(
+    processed = apply_ace_strategy(
         messages, mock_client, mock_settings, state
     )
 
@@ -746,7 +746,7 @@ def test_apply_ace_strategy_respects_curator_frequency():
 
     messages = [{"role": "user", "content": "Test"}]
 
-    # Step 1 - should not run curator
+    # Step 1 - should not run curator (frequency=2, step%2 != 0)
     apply_ace_strategy(messages, mock_client, mock_settings, state)
     assert state.step_count == 1
 
@@ -817,7 +817,7 @@ def test_memory_processor_apply_ace_delegates_correctly():
     messages = [{"role": "user", "content": "Test"}]
 
     # Call apply_ace_strategy directly
-    processed, token_count = apply_ace_strategy(
+    processed = apply_ace_strategy(
         messages, mock_client, mock_settings, state
     )
 

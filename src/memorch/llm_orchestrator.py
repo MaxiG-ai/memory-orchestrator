@@ -1,7 +1,5 @@
 import copy
 import litellm
-import weave
-import os
 import time
 
 from dataclasses import dataclass, field
@@ -46,7 +44,6 @@ class LLMOrchestrator:
     Integrates:
     - LiteLLM for model interactions
     - Memory processing for context optimization
-    - Comprehensive tracking with weave/wandb
 
     Usage:
         # Initialize
@@ -65,16 +62,20 @@ class LLMOrchestrator:
         )
     """
 
-    def __init__(self, exp_path="config.toml", model_path="model_config.toml"):
+    def __init__(self, exp_path="config.toml", model_path="model_config.toml", config: Optional[ExperimentConfig] = None):
         """
         Initialize orchestrator with configuration.
 
         Args:
             exp_path: Path to experiment config file
             model_path: Path to model registry config file
+            config: Optional pre-loaded experiment config
         """
         # Load static config
-        self.cfg: ExperimentConfig = load_configs(exp_path, model_path)
+        if config is not None:
+            self.cfg: ExperimentConfig = config
+        else:
+            self.cfg: ExperimentConfig = load_configs(exp_path, model_path)
 
         # Initialize memory processor
         self.memory_processor = MemoryProcessor(self.cfg)
@@ -90,21 +91,12 @@ class LLMOrchestrator:
         self._compressed_trace_buffer: List[TraceHistoryEntry] = []
         self._trace_step_counter: int = 0
 
-        # Configure LiteLLM
-        if self.cfg.weave_deep_logging:
-            os.environ["LITELLM_LOG"] = "DEBUG"
-            litellm.suppress_debug_info = False
-            litellm.success_callback = ["weave", "console"]
+        # The compressed view produced by the most recent generate_with_memory_applied()
+        # call. The benchmark can write this back into its message buffer so subsequent
+        # turns build on the already-compressed state rather than the raw growing history.
+        self.last_compressed_view: Optional[List[Dict]] = None
 
         logger.info(f"🚀 Orchestrator initialized for: {self.cfg.experiment_name}")
-
-    def get_exp_config(self) -> Dict[str, Any]:
-        """
-        Return only experiment configs (no model registry). Used for logging with weave.
-        """
-        exp_dict = self.cfg.model_dump()
-        exp_dict.pop("model_registry", None)
-        return exp_dict
 
     def reset_session(self):
         """
@@ -113,6 +105,7 @@ class LLMOrchestrator:
         self.memory_processor.reset_state()
         self._compressed_trace_buffer = []
         self._trace_step_counter = 0
+        self.last_compressed_view = None
         logger.info("🔄 Session Reset")
 
     def get_compressed_trace_as_dicts(self) -> List[Dict]:
@@ -205,7 +198,6 @@ class LLMOrchestrator:
 
         return model_kwargs
 
-    @weave.op(enable_code_capture=False)
     def generate_with_memory_applied(
         self,
         input_messages: List[Dict[str, str]],
@@ -249,18 +241,18 @@ class LLMOrchestrator:
             input_messages, model_name=model_def.litellm_name
         )
 
-        if self._trace_step_counter == 0:
-            first_trace_entry = TraceHistoryEntry(
-                step=0,
-                input_token_count=input_token_count,
-                compressed_token_count=0,
-                compression_ratio=1.0,
-                memory_method=self.active_memory_key,
-                compressed_messages=input_messages,
-            )
-            self._compressed_trace_buffer.append(first_trace_entry)
+        # temporarily removed, was there for demo purposes in trace viewer
+        # if self._trace_step_counter == 0:
+        #     first_trace_entry = TraceHistoryEntry(
+        #         step=0,
+        #         input_token_count=input_token_count,
+        #         compressed_token_count=0,
+        #         compression_ratio=1.0,
+        #         memory_method=self.active_memory_key,
+        #         compressed_messages=input_messages,
+        #     )
+        #     self._compressed_trace_buffer.append(first_trace_entry)
 
-        # Apply memory processing
         try:
             compressed_view, compressed_token_count = (
                 self.memory_processor.apply_strategy(
@@ -296,6 +288,7 @@ class LLMOrchestrator:
             compressed_messages=copy.deepcopy(compressed_view),
         )
         self._compressed_trace_buffer.append(trace_entry)
+        self.last_compressed_view = compressed_view
 
         # Sanitize kwargs (remove model if passed by benchmark)
         kwargs.pop("model", None)
