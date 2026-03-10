@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 from memorch.llm_orchestrator import (
     LLMOrchestrator,
-    CompressedTraceEntry,
 )
+from memorch.utils.trace_history import TraceHistoryEntry
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ class TestCompressedTraceBuffer:
         """
         # Manually add an entry to simulate a previous session
         mock_orchestrator._compressed_trace_buffer.append(
-            CompressedTraceEntry(
+            TraceHistoryEntry(
                 step=1,
                 input_token_count=100,
                 compressed_token_count=50,
@@ -83,14 +83,14 @@ class TestCompressedTraceBuffer:
         assert mock_orchestrator._compressed_trace_buffer == []
         assert mock_orchestrator._trace_step_counter == 0
 
-    def test_get_compressed_trace_returns_copy(self, mock_orchestrator):
+    def test_get_compressed_trace_as_dicts_returns_new_list(self, mock_orchestrator):
         """
-        Verify that get_compressed_trace() returns a copy of the buffer.
+        Verify that get_compressed_trace_as_dicts() returns a copy of the buffer.
 
         Returning a copy prevents external code from accidentally modifying
         the internal buffer state.
         """
-        entry = CompressedTraceEntry(
+        entry = TraceHistoryEntry(
             step=1,
             input_token_count=100,
             compressed_token_count=50,
@@ -100,12 +100,22 @@ class TestCompressedTraceBuffer:
         )
         mock_orchestrator._compressed_trace_buffer.append(entry)
 
-        # Get trace and verify it's a copy
-        trace = mock_orchestrator.get_compressed_trace()
-        assert trace == [entry]
+        # Get serialized trace and verify shape
+        trace_dicts = mock_orchestrator.get_compressed_trace_as_dicts()
+        assert trace_dicts == [
+            {
+                "step": 1,
+                "input_token_count": 100,
+                "compressed_token_count": 50,
+                "compression_ratio": 0.5,
+                "memory_method": "test",
+                "compressed_messages": [{"role": "user", "content": "test"}],
+            }
+        ]
 
-        # Modifying returned list shouldn't affect internal buffer
-        trace.clear()
+        # Modifying returned list should not affect internal buffer
+        trace_dicts.clear()
+
         assert len(mock_orchestrator._compressed_trace_buffer) == 1
 
     def test_get_compressed_trace_as_dicts(self, mock_orchestrator):
@@ -115,7 +125,7 @@ class TestCompressedTraceBuffer:
         This method is used for JSON serialization when saving compressed
         traces to disk. The output must be JSON-compatible dictionaries.
         """
-        entry = CompressedTraceEntry(
+        entry = TraceHistoryEntry(
             step=1,
             input_token_count=100,
             compressed_token_count=50,
@@ -149,7 +159,7 @@ class TestCompressedTraceBuffer:
         for i in range(3):
             mock_orchestrator._trace_step_counter += 1
             mock_orchestrator._compressed_trace_buffer.append(
-                CompressedTraceEntry(
+                TraceHistoryEntry(
                     step=mock_orchestrator._trace_step_counter,
                     input_token_count=100 + i * 50,
                     compressed_token_count=50 + i * 25,
@@ -159,25 +169,25 @@ class TestCompressedTraceBuffer:
                 )
             )
 
-        trace = mock_orchestrator.get_compressed_trace()
-        assert len(trace) == 3
-        assert [e.step for e in trace] == [1, 2, 3]
-        assert trace[0].input_token_count == 100
-        assert trace[1].input_token_count == 150
-        assert trace[2].input_token_count == 200
+        trace_dicts = mock_orchestrator.get_compressed_trace_as_dicts()
+        assert len(trace_dicts) == 3
+        assert [e["step"] for e in trace_dicts] == [1, 2, 3]
+        assert trace_dicts[0]["input_token_count"] == 100
+        assert trace_dicts[1]["input_token_count"] == 150
+        assert trace_dicts[2]["input_token_count"] == 200
 
 
-class TestCompressedTraceEntryDataclass:
-    """Tests for the CompressedTraceEntry dataclass structure."""
+class TestTraceHistoryEntryDataclass:
+    """Tests for the TraceHistoryEntry dataclass structure."""
 
     def test_entry_fields(self):
         """
-        Verify CompressedTraceEntry has all required fields.
+        Verify TraceHistoryEntry has all required fields.
 
         The entry must capture: step number, token counts (input/compressed),
         compression ratio, memory method used, and the actual compressed messages.
         """
-        entry = CompressedTraceEntry(
+        entry = TraceHistoryEntry(
             step=1,
             input_token_count=1000,
             compressed_token_count=500,
