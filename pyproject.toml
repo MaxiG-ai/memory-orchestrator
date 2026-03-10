@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "memorch"
 version = "0.2.0"
-description = "Memory architecture evaluation framework with Open Responses API"
+description = "Memory architecture evaluation framework for LLM tool-use experiments"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "GPL-3.0"
@@ -26,9 +26,6 @@ dependencies = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
 ]
-
-[project.scripts]
-memory-api = "memorch.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/memorch"]
