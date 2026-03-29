@@ -34,12 +34,16 @@ def summarize_conv_history(
 
     # TODO: This should be changed to not depend on the order of messages
     user_query_text = get_first_user_text(messages)
-    user_query = {"role": "user", "content": user_query_text} if user_query_text else None
+    user_query = (
+        {"role": "user", "content": user_query_text} if user_query_text else None
+    )
 
     prog_sum_prompt = PromptManager(
         prompt_file_name="prog_sum.prompt.md",
         prompt_path=summary_prompt_path,
-        caller_dir=Path(__file__).parent,  # ensures the bundled prompt is found when installed
+        caller_dir=Path(
+            __file__
+        ).parent,  # ensures the bundled prompt is found when installed
     )
     summarization_prompt = prog_sum_prompt.render(user_query=user_query)
 
@@ -63,9 +67,9 @@ def summarize_conv_history(
     # Build final message list: [user query, summary]
     summary_message = {"role": "system", "content": summary_text}
 
-    result = []
+    # System message must come first to satisfy OpenAI's message ordering requirement
+    result = [summary_message]
     if user_query:
-        result.append(user_query)  # append the dict, not extend over its keys
-    result.append(summary_message)
+        result.append(user_query)
 
     return result

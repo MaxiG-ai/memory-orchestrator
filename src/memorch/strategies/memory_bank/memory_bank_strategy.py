@@ -99,7 +99,6 @@ class MemoryBankState:
         logger.debug("MemoryBankState reset")
 
 
-
 def apply_memory_bank_strategy(
     messages: List[Dict],
     llm_client: Any,
@@ -142,7 +141,9 @@ def apply_memory_bank_strategy(
     user_query_text = get_first_user_text(messages)
 
     # In case the insight store is empty, we should ingest all existing tool outputs in messages
-    messages_history = messages.copy()  # Create a copy to avoid modifying original messages
+    messages_history = (
+        messages.copy()
+    )  # Create a copy to avoid modifying original messages
     if state.insight_store.is_empty():
         logger.debug("Insight store empty, ingesting all tool outputs from history")
         # Recursively add the last tool interaction to insight store, delete from messages_history until no more tool interactions left
@@ -162,7 +163,9 @@ def apply_memory_bank_strategy(
                     observer_model=observer_model,
                     step_id=state.step_count,
                 )
-            messages_history = messages_history[:idx]  # Remove the last tool interaction from messages_history
+            messages_history = messages_history[
+                :idx
+            ]  # Remove the last tool interaction from messages_history
 
     # Should always run, once insight store is initialized
     else:
@@ -192,7 +195,6 @@ def apply_memory_bank_strategy(
     top_k = getattr(settings, "top_k", 3)
     max_chars = getattr(settings, "max_chars_per_record", 2000)
 
-
     retrieved = retrieve_and_format(
         query=RETRIEVAL_QUERY.format(user_query=user_query_text),
         fact_store=state.fact_store,
@@ -208,7 +210,8 @@ def apply_memory_bank_strategy(
     memory_content = format_retrieved_memory_message(retrieved)
     logger.debug(f"Added {len(retrieved)} retrieved records to context")
 
-    processed_messages = user_query_msgs + memory_content + last_tool_msgs
+    # System message must come first to satisfy OpenAI's message ordering requirement
+    processed_messages = memory_content + user_query_msgs + last_tool_msgs
 
     token_count = get_token_count(processed_messages)
     logger.debug(

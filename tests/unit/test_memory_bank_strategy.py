@@ -664,7 +664,10 @@ class TestMemoryBankStrategy:
     ):
         """
         After first step, strategy should construct context as:
-        user_query + retrieved_memory + last_tool_interaction
+        retrieved_memory + user_query + last_tool_interaction
+
+        System message is placed first to satisfy OpenAI's requirement that
+        system messages precede user messages.
         """
         from memorch.strategies.memory_bank.memory_bank_strategy import (
             MemoryBankState,
@@ -1004,11 +1007,14 @@ class TestBackfill:
         The backfill loop works on a copy (messages_history), so the original
         messages list is unchanged.  The final output is therefore assembled
         from the unmodified messages as:
-            user_query_msgs + retrieved_memory(system) + last_tool_interaction
+            retrieved_memory(system) + user_query_msgs + last_tool_interaction
+
+        System message is placed first to satisfy OpenAI's requirement that
+        system messages precede user messages.
 
         Verifies:
         1. User query is present in output.
-        2. A system message with retrieved context is injected.
+        2. A system message with retrieved context is injected first.
         3. The last tool round (assistant with tool_calls + tool response) is
            preserved at the end of the output.
         """
