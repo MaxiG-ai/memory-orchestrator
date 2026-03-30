@@ -1041,3 +1041,163 @@ class TestBackfill:
         # Last tool round preserved at the end
         assert roles[-1] == "tool"
         assert roles[-2] == "assistant"
+
+
+# =============================================================================
+# Loop Detection Tests
+# =============================================================================
+
+
+class TestLoopDetection:
+    """
+    Tests for the loop detection feature in MemoryBankState.
+
+    The call_log field on MemoryBankState tracks every call to
+    apply_memory_bank_strategy. If the same messages value is passed
+    3 or more times, a ValueError is raised to abort a detected loop.
+    """
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Mock LLM client returning a fixed summary."""
+        llm = Mock()
+        resp = Mock()
+        resp.choices = [Mock()]
+        resp.choices[0].message.content = "Summary"
+        llm.generate_plain.return_value = resp
+        return llm
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Minimal mock settings."""
+        s = Mock()
+        s.observer_model = "gpt-4-1-mini"
+        s.embedding_model = "BAAI/bge-small-en-v1.5"
+        s.top_k = 3
+        s.max_chars_per_record = 2000
+        return s
+
+    @pytest.fixture
+    def state(self):
+        """MemoryBankState with mock embedding model, empty stores."""
+        from memorch.strategies.memory_bank.memory_bank_strategy import MemoryBankState
+
+        mock_model = Mock()
+        mock_model.encode = lambda texts: np.array([[1.0, 0.0] for _ in texts])
+        state = MemoryBankState(_embedding_model=mock_model)
+        state.insight_store = InsightStore(embedding_model=mock_model)
+        return state
+
+    def test_call_log_initialized_empty(self, state):
+        """
+        MemoryBankState.call_log should be an empty list upon creation.
+        This list is used to record every function call for loop detection.
+        """
+        assert state.call_log == []
+
+    def test_call_log_cleared_on_reset(self, state):
+        """
+        MemoryBankState.reset() should clear the call_log along with
+        the other stores, so that loop detection starts fresh between tasks.
+        """
+        state.call_log.append(("apply_memory_bank_strategy", "some_hash"))
+        state.reset()
+        assert state.call_log == []
+
+    def test_loop_detected_raises_on_third_identical_call(
+        self, mock_llm, mock_settings, state
+    ):
+        """
+        When apply_memory_bank_strategy is called 3 times with the exact
+        same messages value, it should raise a ValueError with a message
+        indicating a loop was detected. The first two calls succeed normally.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        messages = [{"role": "user", "content": "Find hotels in Berlin"}]
+
+        # First two calls should succeed
+        apply_memory_bank_strategy(
+            messages=messages, llm_client=mock_llm, settings=mock_settings, state=state
+        )
+        apply_memory_bank_strategy(
+            messages=messages, llm_client=mock_llm, settings=mock_settings, state=state
+        )
+
+        # Third call with the same messages should raise
+        with pytest.raises(ValueError, match="Loop detected"):
+            apply_memory_bank_strategy(
+                messages=messages,
+                llm_client=mock_llm,
+                settings=mock_settings,
+                state=state,
+            )
+
+    def test_no_loop_with_different_messages(self, mock_llm, mock_settings, state):
+        """
+        Calls with different messages values should not trigger loop
+        detection, even if there are many calls. Only identical messages
+        repeated 3+ times trigger the abort.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        for i in range(5):
+            messages = [{"role": "user", "content": f"Query {i}"}]
+            # Each call has different content, so no loop
+            apply_memory_bank_strategy(
+                messages=messages,
+                llm_client=mock_llm,
+                settings=mock_settings,
+                state=state,
+            )
+
+    def test_loop_detection_counts_per_value(self, mock_llm, mock_settings, state):
+        """
+        Loop detection should count occurrences per unique messages value.
+        Two calls with messages A and two with messages B should not trigger,
+        but a third call with messages A should raise.
+        """
+        from memorch.strategies.memory_bank.memory_bank_strategy import (
+            apply_memory_bank_strategy,
+        )
+
+        messages_a = [{"role": "user", "content": "Query A"}]
+        messages_b = [{"role": "user", "content": "Query B"}]
+
+        apply_memory_bank_strategy(
+            messages=messages_a,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=state,
+        )
+        apply_memory_bank_strategy(
+            messages=messages_b,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=state,
+        )
+        apply_memory_bank_strategy(
+            messages=messages_a,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=state,
+        )
+        apply_memory_bank_strategy(
+            messages=messages_b,
+            llm_client=mock_llm,
+            settings=mock_settings,
+            state=state,
+        )
+
+        # Third call with messages_a triggers the loop
+        with pytest.raises(ValueError, match="Loop detected"):
+            apply_memory_bank_strategy(
+                messages=messages_a,
+                llm_client=mock_llm,
+                settings=mock_settings,
+                state=state,
+            )

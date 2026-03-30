@@ -1,3 +1,5 @@
+import json
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -43,6 +45,9 @@ class MemoryBankState:
     insight_store: Optional[InsightStore] = None
     step_count: int = 0
     _embedding_model: Optional[Any] = field(default=None, repr=False)
+    call_log: List[str] = field(
+        default_factory=list
+    )  # tracks serialized call args for loop detection
 
     def __post_init__(self):
         """Initialize insight store if embedding model provided."""
@@ -96,6 +101,7 @@ class MemoryBankState:
         if self.insight_store:
             self.insight_store.clear()
         self.step_count = 0
+        self.call_log.clear()
         logger.debug("MemoryBankState reset")
 
 
@@ -123,6 +129,12 @@ def apply_memory_bank_strategy(
     Returns:
         (processed_messages, token_count)
     """
+    # Loop detection: track calls and abort if same messages seen 3+ times
+    call_key = json.dumps(messages, sort_keys=True, default=str)
+    state.call_log.append(call_key)
+    if Counter(state.call_log)[call_key] >= 3:
+        raise ValueError("Loop detected, aborting case")
+
     state.step_count += 1
 
     # Ensure model is initialized (eager init per user preference)
