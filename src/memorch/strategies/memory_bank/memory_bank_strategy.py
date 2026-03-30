@@ -1,5 +1,4 @@
 import json
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,7 +46,7 @@ class MemoryBankState:
     _embedding_model: Optional[Any] = field(default=None, repr=False)
     call_log: List[str] = field(
         default_factory=list
-    )  # tracks serialized call args for loop detection
+    )  # tracks (tool_name, raw_input) keys for loop detection
 
     def __post_init__(self):
         """Initialize insight store if embedding model provided."""
@@ -105,6 +104,24 @@ class MemoryBankState:
         logger.debug("MemoryBankState reset")
 
 
+LOOP_THRESHOLD = 3  # number of identical tool calls before aborting
+
+
+def _check_loop(
+    tool_outputs: List[Tuple[str, Dict, Dict]], state: "MemoryBankState"
+) -> None:
+    """Log each (tool_name, raw_input) and raise if any appears >= LOOP_THRESHOLD times."""
+    for tool_name, raw_input, _raw_output in tool_outputs:
+        key = json.dumps((tool_name, raw_input), sort_keys=True, default=str)
+        state.call_log.append(key)
+    # Count occurrences; raise on first entry that hits the threshold
+    counts: Dict[str, int] = {}
+    for k in state.call_log:
+        counts[k] = counts.get(k, 0) + 1
+        if counts[k] >= LOOP_THRESHOLD:
+            raise ValueError("Loop detected, aborting case")
+
+
 def apply_memory_bank_strategy(
     messages: List[Dict],
     llm_client: Any,
@@ -129,12 +146,6 @@ def apply_memory_bank_strategy(
     Returns:
         (processed_messages, token_count)
     """
-    # Loop detection: track calls and abort if same messages seen 3+ times
-    call_key = json.dumps(messages, sort_keys=True, default=str)
-    state.call_log.append(call_key)
-    if Counter(state.call_log)[call_key] >= 3:
-        raise ValueError("Loop detected, aborting case")
-
     state.step_count += 1
 
     # Ensure model is initialized (eager init per user preference)
@@ -175,6 +186,7 @@ def apply_memory_bank_strategy(
                     observer_model=observer_model,
                     step_id=state.step_count,
                 )
+                _check_loop(tool_outputs, state)
             messages_history = messages_history[
                 :idx
             ]  # Remove the last tool interaction from messages_history
@@ -196,6 +208,7 @@ def apply_memory_bank_strategy(
                 observer_model=observer_model,
                 step_id=state.step_count,
             )
+            _check_loop(tool_outputs, state)
             logger.debug(f"Ingested {len(trace_ids)} tool outputs")
 
     # First step or no history → pass through unchanged
