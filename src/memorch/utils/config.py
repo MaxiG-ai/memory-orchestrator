@@ -30,7 +30,9 @@ class MemoryDef(BaseModel):
     max_chars_per_record: Optional[int] = 2000
 
     # Fields for Progressive Summarization
-    summary_prompt: str = "memorch/strategies/progressive_summarization/prog_sum.prompt.md"
+    summary_prompt: str = (
+        "memorch/strategies/progressive_summarization/prog_sum.prompt.md"
+    )
     summarizer_model: Optional[str] = None
 
     # ACE strategy fields
@@ -57,6 +59,12 @@ class ExperimentConfig(BaseModel):
     # Haystack experiment settings
     max_messages_after_compression: Optional[int] = None  # None disables the check
     haystack_thresholds: Optional[List[int]] = None  # token count targets for haystack
+
+    # Model used for evaluation/judge tasks (e.g. completeness scoring, LLM-based
+    # function call comparison). Deliberately decoupled from enabled_models so that
+    # evaluation always uses a reliable model regardless of which model is being
+    # benchmarked. Defaults to "gpt-4-1-mini" for backwards compatibility.
+    evaluation_model: Optional[str] = "gpt-4-1-mini"
 
     # Maps strategy name -> config
     memory_strategies: Dict[str, MemoryDef]

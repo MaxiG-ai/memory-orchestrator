@@ -62,7 +62,12 @@ class LLMOrchestrator:
         )
     """
 
-    def __init__(self, exp_path="config.toml", model_path="model_config.toml", config: Optional[ExperimentConfig] = None):
+    def __init__(
+        self,
+        exp_path="config.toml",
+        model_path="model_config.toml",
+        config: Optional[ExperimentConfig] = None,
+    ):
         """
         Initialize orchestrator with configuration.
 
@@ -355,13 +360,30 @@ class LLMOrchestrator:
         **kwargs,
     ) -> Union[ChatCompletion, Any]:
         """
-        Execute LLM request for evaluation. No memory processing applied. Model defaults to GPT-4.1
-        Exception: Any errors from OpenAI API (logged to wandb)
+        Execute LLM request for evaluation tasks (scoring, judging, comparison).
+
+        Always uses the configured evaluation_model rather than the active benchmarked
+        model. This ensures that evaluation calls (e.g. completeness/correctness scoring,
+        LLM-based function call comparison) are never accidentally routed through a model
+        under test — particularly important when benchmarking models whose output format
+        may not match the structured JSON the evaluation prompts require.
+
+        Falls back to active_model_key only when evaluation_model is not set.
         """
+        # Drop any caller-supplied model override — the evaluation model is
+        # determined solely by config to keep evaluation consistent across runs.
         kwargs.pop("model", None)
         try:
-            # Try to find in registry
-            model_def = self.get_model_config()
+            # Resolve the dedicated evaluation model from config; fall back to the
+            # active benchmarked model only when evaluation_model is unset.
+            eval_model_key = self.cfg.evaluation_model or self.active_model_key
+            model_def = self.cfg.model_registry.get(eval_model_key)
+            if not model_def:
+                raise ValueError(
+                    f"Evaluation model '{eval_model_key}' not found in model registry. "
+                    "Set 'evaluation_model' in your experiment config to a key that "
+                    "exists in model_config.toml."
+                )
 
             request_params = {
                 "model": model_def.litellm_name,
