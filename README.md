@@ -2,11 +2,10 @@
 
 Memory orchestration layer for LLM tool-use experiments.
 
-This repository wraps model calls with interchangeable memory strategies so you can benchmark how different context-management techniques affect agentic tool use. It was built for a master thesis and currently focuses on four strategies:
+This repository wraps model calls with interchangeable memory strategies so you can benchmark how different context-management techniques affect agentic tool use. It was built for a master thesis and currently focuses on three documented strategies:
 
 - Truncation
 - Progressive Summarization
-- ACE (Agentic Context Engineering)
 - Memory Bank
 
 ## What this repository does
@@ -42,7 +41,6 @@ Per-strategy documentation:
 
 - `docs/strategies/truncation.md`
 - `docs/strategies/progressive_summarization.md`
-- `docs/strategies/ace.md`
 - `docs/strategies/memory_bank.md`
 
 Configuration examples:
@@ -63,7 +61,6 @@ MemoryProcessor.apply_strategy()
         |
         +--> truncation
         +--> progressive_summarization
-        +--> ace
         +--> memory_bank
         +--> no_strategy
         |
@@ -77,7 +74,7 @@ litellm.completion(...)
 Response + compression metadata + compressed trace history
 ```
 
-Two strategies (`truncation` and `progressive_summarization`) are threshold-sensitive and only activate when the configured token threshold is exceeded. Two others (`ace` and `memory_bank`) run every step because they maintain their own internal state.
+Two strategies (`truncation` and `progressive_summarization`) are threshold-sensitive and only activate when the configured token threshold is exceeded. `memory_bank` runs every step because it maintains its own internal state.
 
 ## Setup
 
@@ -115,10 +112,6 @@ Keeps the original task-defining user message and only the most recent tool inte
 
 When the trace crosses a threshold, summarizes historical context with an auxiliary LLM and reconstructs the context as a system summary plus the user query.
 
-### ACE
-
-Maintains a structured playbook that evolves over the task. It uses generator, reflector, and curator subcomponents to accumulate reusable guidance and inject it back into the prompt.
-
 ### Memory Bank
 
 Builds a dual-store memory system over prior tool outputs. Raw outputs are kept in a fact store, while an observer model summarizes them into an embedding-backed insight store for retrieval.
@@ -134,7 +127,7 @@ uv run pytest
 If you only want to inspect documentation-related consistency while editing docs, a fast smoke check is:
 
 ```bash
-uv run pytest tests/unit/test_config.py tests/unit/test_progressive_summarization.py tests/unit/test_truncation_strategy.py tests/unit/test_ace_strategy.py tests/unit/test_memory_bank_strategy.py
+uv run pytest tests/unit/test_config.py tests/unit/test_progressive_summarization.py tests/unit/test_truncation_strategy.py tests/unit/test_memory_bank_strategy.py
 ```
 
 ## Current improvement opportunities

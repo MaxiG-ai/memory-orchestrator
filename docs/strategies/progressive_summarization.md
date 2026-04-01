@@ -132,7 +132,7 @@ There is also an in-code TODO noting that the implementation should not depend s
 ## Strengths
 
 - compresses much more history than truncation
-- relatively simple architecture compared with ACE or Memory Bank
+- relatively simple architecture compared with Memory Bank
 - configurable summarizer prompt and summarizer model
 - easy to benchmark because the output prompt shape is compact and stable
 

@@ -23,8 +23,8 @@ src/memorch/
 ├── strategies/
 │   ├── truncation/
 │   ├── progressive_summarization/
-│   ├── ace/
-│   └── memory_bank/
+│   ├── memory_bank/
+│   └── no_strategy.py
 └── utils/
     ├── config.py
     ├── token_count.py
@@ -108,14 +108,13 @@ Responsibilities:
 - look up the selected strategy in config
 - apply generic loop detection before strategy execution
 - decide whether threshold-sensitive strategies should run
-- keep persistent strategy state for ACE and Memory Bank
+- keep persistent strategy state for Memory Bank
 - provide a unified `(processed_messages, token_count)` output contract
 
 The processor contains explicit strategy branches for:
 
 - `truncation`
 - `progressive_summarization`
-- `ace`
 - `memory_bank`
 - `no_strategy`
 
@@ -135,7 +134,6 @@ These transform the visible message list directly.
 
 These preserve task-level state across steps.
 
-- `ace` via `ACEState`
 - `memory_bank` via `MemoryBankState`
 
 This distinction matters because the processor must reset those states between tasks while keeping them alive across turns inside one task.
@@ -188,7 +186,7 @@ Files:
 - `src/memorch/utils/prompt_manager.py`
 - `src/memorch/utils/llm_helpers.py`
 
-These are used by LLM-backed strategies such as progressive summarization, ACE, and Memory Bank observer flows.
+These are used by LLM-backed strategies such as progressive summarization and Memory Bank observer flows.
 
 ## 7. Memory strategy integration points
 
@@ -205,10 +203,7 @@ These are used by LLM-backed strategies such as progressive summarization, ACE, 
               +------------------------+------------------------+
               |                        |                        |
               v                        v                        v
-        Truncation          Progressive Summarization      Stateful Systems
-                                                             |          |
-                                                             v          v
-                                                            ACE   Memory Bank
+        Truncation          Progressive Summarization        Memory Bank
 ```
 
 All strategies ultimately return a transformed message list that becomes the actual prompt sent to the LLM.
@@ -235,12 +230,6 @@ full history -> first user task + last tool interaction(s)
 full history -> system summary + first user query
 ```
 
-### ACE
-
-```text
-messages -> playbook system message + original messages + reasoning-trace system message
-```
-
 ### Memory Bank
 
 ```text
@@ -264,7 +253,6 @@ Created and consumed within one `generate_with_memory_applied()` invocation:
 
 Persists across multiple calls until `reset_session()`:
 
-- ACE playbook and reflection artifacts
 - Memory Bank stores and loaded embedding model
 - compressed trace buffer
 - trace step counter
@@ -274,7 +262,6 @@ Reset path:
 ```text
 LLMOrchestrator.reset_session()
    -> MemoryProcessor.reset_state()
-      -> ACEState.reset()
       -> MemoryBankState.reset()
    -> clear compressed trace buffer
    -> clear last compressed view
@@ -302,7 +289,7 @@ Broad coverage areas include:
 - config parsing and validation
 - token counting and trace processing utilities
 - orchestrator behavior
-- strategy-specific logic for truncation, progressive summarization, ACE, and Memory Bank
+- strategy-specific logic for truncation, progressive summarization, and Memory Bank
 
 The strategy docs should be read together with their unit tests because the tests often capture edge cases and implicit contracts more precisely than the current code comments do.
 
